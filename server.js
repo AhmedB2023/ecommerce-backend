@@ -15,6 +15,20 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// TEMP: list a few users so we can see their IDs
+app.get('/debug/users', async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'SELECT id, username, email FROM users ORDER BY id LIMIT 10;'
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('DEBUG /users error:', err);
+    res.status(500).send('Error fetching users');
+  }
+});
+
+
 // --- Ensure DB schema exists on boot (idempotent) ---
 async function ensureSchema() {
   const sql = `
