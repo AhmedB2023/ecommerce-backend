@@ -1,10 +1,22 @@
+
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
+
+
 const express = require('express');
 const cors = require('cors');
 const pool = require('./db');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const bwipjs = require('bwip-js');
-require('dotenv').config();
+
+
+
+
+
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+
 
 
 
@@ -483,7 +495,7 @@ app.post('/api/forgot-password', async (req, res) => {
         );
 
         // Simulate sending email (log reset link)
-        const resetLink = `http://localhost:5002/reset-password?token=${token}`;
+        const resetLink = `${process.env.REACT_APP_API_URL}/reset-password?token=${token}`;
         console.log(`Password reset link: ${resetLink}`);
 
         res.status(200).json({ message: 'Password reset link sent!' });
@@ -577,5 +589,6 @@ app.get('/api/orders', async (req, res) => {
 // Start the server
 const PORT = 5002; // Use a different port
 app.listen(PORT, () => {
-    console.log(`Backend server is running on http://localhost:${PORT}`);
+    console.log(`Backend server is running on http://success_url: 'https://tajerr.netlify.app/thank-you',
+cancel_url: 'https://tajerr.netlify.app/checkout',:${PORT}`);
 });

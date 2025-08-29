@@ -23,8 +23,10 @@ router.post('/create-checkout-session', async (req, res) => {
       payment_method_types: ['card'],
       line_items,
       mode: 'payment',
-      success_url: 'http://localhost:3000/thank-you',
-      cancel_url: 'http://localhost:3000/checkout',
+      success_url: 'http://success_url: 'https://tajerr.netlify.app/thank-you',
+cancel_url: 'https://tajerr.netlify.app/checkout',:3000/thank-you',
+      cancel_url: 'http://success_url: 'https://tajerr.netlify.app/thank-you',
+cancel_url: 'https://tajerr.netlify.app/checkout',:3000/checkout',
     });
 
     res.json({ url: session.url });
