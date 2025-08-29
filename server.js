@@ -15,34 +15,9 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// TEMP: list a few users so we can see their IDs
-app.get('/debug/users', async (req, res) => {
-  try {
-    const { rows } = await pool.query(
-      'SELECT id, username, email FROM users ORDER BY id LIMIT 10;'
-    );
-    res.json(rows);
-  } catch (err) {
-    console.error('DEBUG /users error:', err);
-    res.status(500).send('Error fetching users');
-  }
-});
 
-// TEMP: insert a sample product
-app.get('/debug/add-product', async (req, res) => {
-  try {
-    const result = await pool.query(
-      `INSERT INTO products (name, price, description, vendor_id)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      ['Tea', 5.99, 'Fresh green tea', 1]  // vendor_id = 1
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error('DEBUG add-product error:', err);
-    res.status(500).send('Error inserting product');
-  }
-});
+
+
 
 
 // --- Ensure DB schema exists on boot (idempotent) ---
