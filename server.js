@@ -527,7 +527,8 @@ app.post('/api/forgot-password', async (req, res) => {
       [email, token, expiresAt]
     );
 
-    const resetLink = `${process.env.REACT_APP_API_URL}/reset-password?token=${token}`;
+    const resetLink = `${process.env.APP_BASE_URL}/reset-password?token=${token}`;
+
     console.log(`Password reset link: ${resetLink}`);
 
     res.status(200).json({ message: 'Password reset link sent!' });
