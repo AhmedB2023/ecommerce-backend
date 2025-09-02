@@ -10,6 +10,8 @@ const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
 const bwipjs = require('bwip-js');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const nodemailer = require('nodemailer');
+
 
 const app = express();
 app.use(cors());
@@ -510,6 +512,14 @@ app.get("/api/vendor/:vendorId/products", async (req, res) => {
   }
 });
 
+const transporter = nodemailer.createTransport({
+  service: 'gmail',
+  auth: {
+    user: process.env.EMAIL_USER,
+    pass: process.env.EMAIL_PASS
+  }
+});
+
 // PASSWORD RESET
 app.post('/api/forgot-password', async (req, res) => {
   const { email } = req.body;
@@ -529,7 +539,18 @@ app.post('/api/forgot-password', async (req, res) => {
 
     const resetLink = `${process.env.APP_BASE_URL}/reset-password?token=${token}`;
 
-    console.log(`Password reset link: ${resetLink}`);
+    // ✅ Send email using Nodemailer
+    await transporter.sendMail({
+      from: process.env.EMAIL_USER,
+      to: email,
+      subject: 'Reset Your Tajer Password',
+      html: `
+        <p>Hello,</p>
+        <p>You requested to reset your password. Click the link below:</p>
+        <p><a href="${resetLink}">${resetLink}</a></p>
+        <p>This link will expire in 1 hour.</p>
+      `
+    });
 
     res.status(200).json({ message: 'Password reset link sent!' });
   } catch (error) {
@@ -537,6 +558,7 @@ app.post('/api/forgot-password', async (req, res) => {
     res.status(500).json({ message: 'Server error. Please try again later.' });
   }
 });
+
 
 app.post('/api/reset-password', async (req, res) => {
   const { token, newPassword } = req.body;
