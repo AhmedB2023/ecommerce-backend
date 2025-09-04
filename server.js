@@ -16,6 +16,10 @@ const sendResetEmail = require('./utils/sendEmail');
 const app = express();
 app.use(cors());
 app.use(express.json());
+// ✅ Add test route here to confirm deployment works
+app.get('/test', (req, res) => {
+  res.send('✅ Test route is working!');
+});
 
 
 
