@@ -1,0 +1,35 @@
+[33mcommit f403269641d36323feccedef4ca118a14de8463b[m
+Author: AhmedB2023 <abarakati85@gmail.com>
+Date:   Tue Sep 2 16:28:27 2025 -0400
+
+    fix: removed sensitive .env file from commit
+
+[33mcommit 265d7452a50f06216c40882e4299eae1ee387449[m[33m ([m[1;31morigin/main[m[33m)[m
+Author: AhmedB2023 <abarakati85@gmail.com>
+Date:   Tue Sep 2 11:02:53 2025 -0400
+
+    nodemailer update
+
+[33mcommit 3ce002c86f445f1d9dedcc1ab7a524fbee859686[m
+Author: AhmedB2023 <abarakati85@gmail.com>
+Date:   Tue Sep 2 10:44:09 2025 -0400
+
+    feat: enable password reset email via Nodemailer and App Password
+
+[33mcommit 0e378c9ad9ec93271a0e88ff59e74bf8e5f589f7[m
+Author: AhmedB2023 <abarakati85@gmail.com>
+Date:   Mon Sep 1 19:24:14 2025 -0400
+
+    updated the /api/forgot-password endpoint
+
+[33mcommit f1942d762b2e741c77ed78ec34629bf844ce1326[m
+Author: AhmedB2023 <abarakati85@gmail.com>
+Date:   Fri Aug 29 14:36:12 2025 -0400
+
+    fix: move dotenv to top and disable in production
+
+[33mcommit 7ca1fec3a73275830b1363c36beec03dc9f19aa1[m
+Author: AhmedB2023 <abarakati85@gmail.com>
+Date:   Thu Aug 28 18:47:32 2025 -0400
+
+    Initial backend commit
