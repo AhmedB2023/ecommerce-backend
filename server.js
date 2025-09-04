@@ -13,14 +13,16 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const nodemailer = require('nodemailer');
 const sendResetEmail = require('./utils/sendEmail');
 
+
+
 const app = express();
 app.use(cors());
 app.use(express.json());
+
 // ✅ Add test route here to confirm deployment works
 app.get('/test', (req, res) => {
   res.send('✅ Test route is working!');
 });
-
 
 
 
