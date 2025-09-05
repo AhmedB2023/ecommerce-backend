@@ -251,6 +251,8 @@ app.post('/api/forgot-password', async (req, res) => {
 
     const token = uuidv4();
     const resetLink = `${process.env.APP_BASE_URL}/reset-password?token=${token}`;
+    console.log("👉 Reset email to:", email);
+  console.log("👉 Reset link:", resetLink);
     await sendResetEmail(email, resetLink);
 
     res.json({ message: 'Password reset email sent' });
@@ -260,18 +262,41 @@ app.post('/api/forgot-password', async (req, res) => {
   }
 });
 
-// Reset password
+// Secure password reset using token
 app.post('/api/reset-password', async (req, res) => {
-  const { email, newPassword } = req.body;
+  const { token, newPassword } = req.body;
+
+  if (!token || !newPassword) {
+    return res.status(400).json({ message: 'Token and new password required.' });
+  }
+
   try {
+    // Find user by valid token
+    const userResult = await pool.query(
+      `SELECT * FROM users WHERE reset_token = $1 AND reset_token_expires > NOW()`,
+      [token]
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(400).json({ message: 'Invalid or expired token.' });
+    }
+
+    const user = userResult.rows[0];
+
+    // Hash and update password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    await pool.query(`UPDATE users SET password = $1 WHERE email = $2`, [hashedPassword, email]);
-    res.json({ message: 'Password updated' });
+    await pool.query(
+      `UPDATE users SET password = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2`,
+      [hashedPassword, user.id]
+    );
+
+    res.json({ message: 'Password updated successfully!' });
   } catch (err) {
-    console.error(err.message);
+    console.error('Reset error:', err.message);
     res.status(500).json({ message: 'Reset failed' });
   }
 });
+
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
