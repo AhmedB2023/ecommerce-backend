@@ -12,7 +12,11 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const sendResetEmail = require('./utils/sendEmail');
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: ['https://tajernow.com', 'http://localhost:3000'],
+  credentials: true,
+}));
+
 app.use(express.json());
 
 // Ensure DB schema
