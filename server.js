@@ -152,24 +152,6 @@ app.post('/api/register', async (req, res) => {
   }
 });
 
-// Login route
-app.post('/api/login', async (req, res) => {
-  const { email, password } = req.body;
-  try {
-    const result = await pool.query(`SELECT * FROM users WHERE email = $1`, [email]);
-    const user = result.rows[0];
-    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
-
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
-
-    res.json({ id: user.id, username: user.username, role: user.role });
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Login error');
-  }
-});
-
 // Reserve order (customer or guest)
 app.post('/api/reserve-order', async (req, res) => {
   const { customer_id, vendor_id, items = [], guest_name = null, guest_contact = null } = req.body;
@@ -217,6 +199,7 @@ app.post('/api/reserve-order', async (req, res) => {
     client.release();
   }
 });
+
 
 
 // Get all orders (grouped)
