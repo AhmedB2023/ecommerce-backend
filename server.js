@@ -154,6 +154,7 @@ app.post('/api/register', async (req, res) => {
 
 // Reserve order (customer or guest)
 app.post('/api/reserve-order', async (req, res) => {
+  console.log('Incoming order request:', req.body); 
   const { customer_id, vendor_id, items = [], guest_name = null, guest_contact = null } = req.body;
 
   // basic validation
