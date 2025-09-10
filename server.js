@@ -173,7 +173,7 @@ app.post('/api/login', async (req, res) => {
 // Reserve order (customer or guest)
 app.post('/api/reserve-order', async (req, res) => {
  const { user_id, vendor_id, items, guest_name, guest_contact } = req.body;
-  const orderId = uuidv4();
+  
   const barcodeText = orderId.slice(0, 8);
 
   try {
