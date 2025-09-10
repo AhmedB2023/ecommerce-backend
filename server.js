@@ -172,16 +172,16 @@ app.post('/api/login', async (req, res) => {
 
 // Reserve order (customer or guest)
 app.post('/api/reserve-order', async (req, res) => {
-  const { customer_id, vendor_id, items, guest_name, guest_contact } = req.body;
+ const { user_id, vendor_id, items, guest_name, guest_contact } = req.body;
   const orderId = uuidv4();
   const barcodeText = orderId.slice(0, 8);
 
   try {
-    await pool.query(
-      `INSERT INTO orders (id, customer_id, vendor_id, barcode, guest_name, guest_contact)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [orderId, customer_id || null, vendor_id, barcodeText, guest_name, guest_contact]
-    );
+await pool.query(
+  `INSERT INTO orders (id, user_id, vendor_id, barcode, guest_name, guest_contact)
+   VALUES ($1, $2, $3, $4, $5, $6)`,
+  [orderId, user_id || null, vendor_id, barcodeText, guest_name, guest_contact]
+);
 
     for (const item of items) {
       await pool.query(
