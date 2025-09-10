@@ -172,31 +172,52 @@ app.post('/api/login', async (req, res) => {
 
 // Reserve order (customer or guest)
 app.post('/api/reserve-order', async (req, res) => {
- const { user_id, vendor_id, items, guest_name, guest_contact } = req.body;
-  
-  const barcodeText = orderId.slice(0, 8);
+  const { customer_id, vendor_id, items = [], guest_name = null, guest_contact = null } = req.body;
 
+  // basic validation
+  if (!vendor_id || !Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Missing vendor_id or items' });
+  }
+
+  // 8-char barcode, independent of orderId
+  const barcodeText = crypto.randomBytes(4).toString('hex');
+
+  // total price (numbers only)
+  const total = items.reduce((sum, it) => sum + Number(it.price) * Number(it.quantity), 0);
+
+  const client = await pool.connect();
   try {
-await pool.query(
-  `INSERT INTO orders (id, user_id, vendor_id, barcode, guest_name, guest_contact)
-   VALUES ($1, $2, $3, $4, $5, $6)`,
-  [orderId, user_id || null, vendor_id, barcodeText, guest_name, guest_contact]
-);
+    await client.query('BEGIN');
 
-    for (const item of items) {
-      await pool.query(
-        `INSERT INTO order_items (order_id, product_id, quantity)
-         VALUES ($1, $2, $3)`,
-        [orderId, item.product_id, item.quantity]
-      );
+    // orders.id is auto-increment INTEGER (no UUIDs)
+    const { rows } = await client.query(
+      `INSERT INTO orders (user_id, vendor_id, total_price, guest_name, guest_contact, barcode)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING id`,
+      [customer_id || null, vendor_id, total, guest_name, guest_contact, barcodeText]
+    );
+    const orderId = rows[0].id;
+
+    // order items
+    const insertItemSQL = `
+      INSERT INTO order_items (order_id, product_id, quantity, price)
+      VALUES ($1, $2, $3, $4)
+    `;
+    for (const it of items) {
+      await client.query(insertItemSQL, [orderId, it.product_id, it.quantity, it.price]);
     }
 
-    res.status(201).json({ message: 'Order reserved', orderId, barcode: barcodeText });
+    await client.query('COMMIT');
+    return res.json({ success: true, orderId, barcodeText });
   } catch (err) {
-    console.error(err.message);
-    res.status(500).json({ message: 'Order failed' });
+    await client.query('ROLLBACK');
+    console.error('reserve-order error:', err);
+    return res.status(500).json({ error: 'Order failed' });
+  } finally {
+    client.release();
   }
 });
+
 
 // Get all orders (grouped)
 app.get('/api/orders', async (req, res) => {
