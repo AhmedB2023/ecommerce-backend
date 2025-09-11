@@ -143,23 +143,43 @@ app.get('/api/vendor/:vendorId/products', async (req, res) => {
   }
 });
 
-//Login Route
+
+// Login Route
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
+
+  if (!email || !password) {
+    console.log("❌ Missing email or password");
+    return res.status(400).json({ message: "Email and password are required." });
+  }
+
   try {
     const result = await pool.query(`SELECT * FROM users WHERE email = $1`, [email]);
     const user = result.rows[0];
 
-    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+    if (!user) {
+      console.log(`❌ Login failed — email not found: ${email}`);
+      return res.status(401).json({ message: "Email not found." });
+    }
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
+    if (!isMatch) {
+      console.log(`❌ Login failed — incorrect password for ${email}`);
+      return res.status(401).json({ message: "Incorrect password." });
+    }
 
-    // You can generate a token here if needed
-    res.json({ id: user.id, username: user.username, email: user.email, role: user.role });
+    console.log(`✅ Login successful for ${email}`);
+
+    res.json({
+      id: user.id,
+      username: user.username,
+      email: user.email,
+      role: user.role
+    });
+
   } catch (err) {
-    console.error('Login error:', err.message);
-    res.status(500).json({ message: 'Server error' });
+    console.error('🔥 Login error:', err.message);
+    res.status(500).json({ message: "Server error during login." });
   }
 });
 
