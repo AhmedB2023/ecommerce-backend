@@ -10,6 +10,8 @@ const { v4: uuidv4 } = require('uuid');
 const bwipjs = require('bwip-js');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const sendResetEmail = require('./utils/sendEmail');
+const crypto = require('crypto');
+
 
 const app = express();
 
