@@ -12,10 +12,16 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const sendResetEmail = require('./utils/sendEmail');
 
 const app = express();
+
 app.use(cors({
   origin: ['https://tajernow.com', 'http://localhost:3000'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
+
+app.options('*', cors());
+
 
 app.use(express.json());
 
@@ -155,7 +161,10 @@ app.post('/api/register', async (req, res) => {
 // Reserve order (customer or guest)
 app.post('/api/reserve-order', async (req, res) => {
   console.log('Incoming order request:', req.body); 
+  
+
   const { customer_id, items = [], guest_name = null, guest_contact = null } = req.body;
+  console.log("👉 items received:", items);  // add this line
 
   // basic validation
   if (!Array.isArray(items) || items.length === 0) {
