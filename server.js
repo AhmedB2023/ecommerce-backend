@@ -155,33 +155,29 @@ app.post('/api/register', async (req, res) => {
 // Reserve order (customer or guest)
 app.post('/api/reserve-order', async (req, res) => {
   console.log('Incoming order request:', req.body); 
-  const { customer_id, vendor_id, items = [], guest_name = null, guest_contact = null } = req.body;
+  const { customer_id, items = [], guest_name = null, guest_contact = null } = req.body;
 
   // basic validation
-  if (!vendor_id || !Array.isArray(items) || items.length === 0) {
-    return res.status(400).json({ error: 'Missing vendor_id or items' });
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: 'Missing items' });
   }
 
-  // 8-char barcode, independent of orderId
   const barcodeText = crypto.randomBytes(4).toString('hex');
 
-  // total price (numbers only)
   const total = items.reduce((sum, it) => sum + Number(it.price) * Number(it.quantity), 0);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // orders.id is auto-increment INTEGER (no UUIDs)
     const { rows } = await client.query(
-      `INSERT INTO orders (user_id, vendor_id, total_price, guest_name, guest_contact, barcode)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO orders (user_id, total_price, guest_name, guest_contact, barcode)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING id`,
-      [customer_id || null, vendor_id, total, guest_name, guest_contact, barcodeText]
+      [customer_id || null, total, guest_name, guest_contact, barcodeText]
     );
     const orderId = rows[0].id;
 
-    // order items
     const insertItemSQL = `
       INSERT INTO order_items (order_id, product_id, quantity, price)
       VALUES ($1, $2, $3, $4)
@@ -200,6 +196,7 @@ app.post('/api/reserve-order', async (req, res) => {
     client.release();
   }
 });
+
 
 
 
