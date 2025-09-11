@@ -143,6 +143,27 @@ app.get('/api/vendor/:vendorId/products', async (req, res) => {
   }
 });
 
+//Login Route
+app.post('/api/login', async (req, res) => {
+  const { email, password } = req.body;
+  try {
+    const result = await pool.query(`SELECT * FROM users WHERE email = $1`, [email]);
+    const user = result.rows[0];
+
+    if (!user) return res.status(401).json({ message: 'Invalid credentials' });
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) return res.status(401).json({ message: 'Invalid credentials' });
+
+    // You can generate a token here if needed
+    res.json({ id: user.id, username: user.username, email: user.email, role: user.role });
+  } catch (err) {
+    console.error('Login error:', err.message);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
 // Register route
 app.post('/api/register', async (req, res) => {
   const { username, email, password, role } = req.body;
