@@ -16,11 +16,19 @@ const crypto = require('crypto');
 const app = express();
 
 app.use(cors({
-  origin: ['https://tajernow.com', 'http://localhost:3000'],
+  origin: function (origin, callback) {
+    const allowedOrigins = ['https://tajernow.com', 'http://localhost:3000'];
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
+
 
 app.options('*', cors());
 
@@ -170,11 +178,14 @@ app.post('/api/login', async (req, res) => {
 
     console.log(`✅ Login successful for ${email}`);
 
+    // ✅ Wrap user in `user` key
     res.json({
-      id: user.id,
-      username: user.username,
-      email: user.email,
-      role: user.role
+      user: {
+        id: user.id,
+        username: user.username,
+        email: user.email,
+        role: user.role
+      }
     });
 
   } catch (err) {
@@ -182,6 +193,7 @@ app.post('/api/login', async (req, res) => {
     res.status(500).json({ message: "Server error during login." });
   }
 });
+
 
 
 // Register route
