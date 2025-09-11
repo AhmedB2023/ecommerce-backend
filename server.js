@@ -191,6 +191,7 @@ app.post('/api/reserve-order', async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('reserve-order error:', err);
+    console.error('📛 Full stack:', err.stack);
     return res.status(500).json({ error: 'Order failed' });
   } finally {
     client.release();
