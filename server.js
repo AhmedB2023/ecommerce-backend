@@ -1,3 +1,8 @@
+
+require('dotenv').config();
+console.log("🔍 APP_BASE_URL from .env:", process.env.APP_BASE_URL);
+
+
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
 }
@@ -11,6 +16,7 @@ const bwipjs = require('bwip-js');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const sendResetEmail = require('./utils/sendEmail');
 const crypto = require('crypto');
+
 
 
 const app = express();
