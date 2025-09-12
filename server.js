@@ -291,21 +291,29 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-
-// Reserve order (customer or guest)
+// Reserve orders
 app.post('/api/reserve-order', async (req, res) => {
   console.log('Incoming order request:', req.body); 
-  
 
-  const { customer_id, items = [], guest_name = null, guest_contact = null } = req.body;
-  console.log("👉 items received:", items);  // add this line
+  const {
+    customer_id,
+    vendor_id,              // ✅ now extracted properly
+    items = [],
+    guest_name = null,
+    guest_contact = null,
+  } = req.body;
 
-  // basic validation
+  console.log("👉 items received:", items);
+
   if (!Array.isArray(items) || items.length === 0) {
     return res.status(400).json({ error: 'Missing items' });
   }
 
-  const barcodeText = crypto.randomBytes(4).toString('hex');
+  if (!vendor_id) {
+    return res.status(400).json({ error: 'Missing vendor_id' });
+  }
+
+  const barcodeText = require("crypto").randomBytes(4).toString('hex');
 
   const total = items.reduce((sum, it) => sum + Number(it.price) * Number(it.quantity), 0);
 
@@ -313,15 +321,16 @@ app.post('/api/reserve-order', async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    // ✅ Now includes vendor_id
     const { rows } = await client.query(
       `INSERT INTO orders (user_id, vendor_id, total_price, guest_name, guest_contact, barcode)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
       [customer_id || null, vendor_id, total, guest_name, guest_contact, barcodeText]
-
     );
     const orderId = rows[0].id;
 
+    // ✅ Confirm order_items are inserting correctly
     const insertItemSQL = `
       INSERT INTO order_items (order_id, product_id, quantity, price)
       VALUES ($1, $2, $3, $4)
@@ -335,7 +344,6 @@ app.post('/api/reserve-order', async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('reserve-order error:', err);
-    console.error('📛 Full stack:', err.stack);
     return res.status(500).json({ error: 'Order failed' });
   } finally {
     client.release();
