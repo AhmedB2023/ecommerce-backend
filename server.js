@@ -138,7 +138,7 @@ app.post('/api/products', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
-
+console.log("✅ /api/products POST route registered");
 
 // Search products
 app.get('/api/search', async (req, res) => {
