@@ -106,6 +106,41 @@ app.get('/api/products', async (req, res) => {
 });
 
 
+// Add new product (only vendors can insert)
+app.post('/api/products', async (req, res) => {
+  const { name, description, price, stock, vendor_id } = req.body;
+
+  try {
+    // ✅ Check that the user is a vendor
+    const roleCheck = await pool.query(
+      'SELECT role FROM users WHERE id = $1',
+      [vendor_id]
+    );
+
+    if (roleCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (roleCheck.rows[0].role !== 'vendor') {
+      return res.status(403).json({ error: 'Only vendors can add products' });
+    }
+
+    // ✅ Insert the product
+    const result = await pool.query(
+      `INSERT INTO products (name, description, price, stock, vendor_id)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING *`,
+      [name, description, price, stock, vendor_id]
+    );
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Error inserting product:', err.message);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
 // Search products
 app.get('/api/search', async (req, res) => {
   const search = (req.query.query || '').trim();
