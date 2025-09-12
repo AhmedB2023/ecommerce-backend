@@ -18,11 +18,26 @@ const sendResetEmail = async (toEmail, resetLink) => {
     sender,
     to,
     subject: 'Reset your password',
+    replyTo: {
+      email: 'support@tajernow.com',
+      name: 'Tajer Support'
+    },
+    headers: {
+      'X-Mailer': 'Brevo-Tajer'
+    },
     htmlContent: `
-      <p>Hello,</p>
-      <p>Click the link below to reset your password:</p>
-      <a href="${resetLink}">${resetLink}</a>
-    `,
+      <div style="font-family: Arial, sans-serif; line-height: 1.5;">
+        <p>Hello,</p>
+        <p>You recently requested to reset your password. Click the link below to reset it:</p>
+        <p><a href="${resetLink}" style="color: #1a73e8;">Reset Password</a></p>
+        <p>If you didn’t request this, you can safely ignore this email.</p>
+        <hr>
+        <p style="font-size: 12px; color: gray;">
+          This email was sent by <strong>Tajer</strong> • <a href="mailto:support@tajernow.com">support@tajernow.com</a><br>
+          If you have any questions, feel free to reach out.
+        </p>
+      </div>
+    `
   };
 
   try {
