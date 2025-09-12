@@ -92,10 +92,11 @@ app.get('/test', (req, res) => {
 app.get('/api/products', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT p.id, p.name, p.price, p.description,   p.vendor_id, 
+      SELECT p.id, p.name, p.price, p.description, p.vendor_id, 
              u.username AS vendor_name
       FROM products p
       JOIN users u ON p.vendor_id = u.id
+      WHERE u.role = 'vendor'   -- ✅ only allow vendors
     `);
     res.json(result.rows);
   } catch (err) {
@@ -103,6 +104,7 @@ app.get('/api/products', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
+
 
 // Search products
 app.get('/api/search', async (req, res) => {
