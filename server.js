@@ -88,7 +88,7 @@ app.get('/test', (req, res) => {
   res.send('✅ Test route is working!');
 });
 
-// Get all products
+// Get all active products
 app.get('/api/products', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -96,7 +96,8 @@ app.get('/api/products', async (req, res) => {
              u.username AS vendor_name
       FROM products p
       JOIN users u ON p.vendor_id = u.id
-      WHERE u.role = 'vendor'   -- ✅ only allow vendors
+      WHERE u.role = 'vendor'
+        AND p.is_active = true     -- ✅ Only return active products
     `);
     res.json(result.rows);
   } catch (err) {
@@ -104,6 +105,7 @@ app.get('/api/products', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
+
 
 // Add new product (only vendors can insert)
 app.post('/api/products', async (req, res) => {
@@ -140,32 +142,27 @@ app.post('/api/products', async (req, res) => {
   }
 });
 
-// Delete a product (only vendors can delete their own products)
+// Soft delete a product
 app.delete('/api/products/:id', async (req, res) => {
   const { id } = req.params;
 
   try {
-    // ✅ Check if product exists
-    const check = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
-    if (check.rows.length === 0) {
-      return res.status(404).json({ error: 'Product not found' });
-    }
-
-    // ✅ Delete product
     const result = await pool.query(
-      'DELETE FROM products WHERE id = $1 RETURNING *',
+      'UPDATE products SET is_active = false WHERE id = $1 RETURNING *',
       [id]
     );
 
-    res.json({
-      message: '✅ Product deleted successfully',
-      product: result.rows[0]
-    });
-  } catch (err) {
-    console.error('Error deleting product:', err.message);
-    res.status(500).json({ error: 'Server error while deleting product' });
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: 'Product not found or already deleted' });
+    }
+
+    res.json({ message: 'Product soft-deleted successfully', product: result.rows[0] });
+  } catch (error) {
+    console.error('Error soft-deleting product:', error);
+    res.status(500).json({ message: 'Server error' });
   }
 });
+
 
 
 // Search products
@@ -175,10 +172,11 @@ app.get('/api/search', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT p.id, p.name, p.price, p.description,  p.vendor_id, u.username AS vendor_name
+      `SELECT p.id, p.name, p.price, p.description, p.vendor_id, u.username AS vendor_name
        FROM products p
        JOIN users u ON p.vendor_id = u.id
-       WHERE p.name ILIKE $1`,
+       WHERE p.name ILIKE $1
+         AND p.is_active = true`,   -- //✅ Only show active products
       [`%${search}%`]
     );
     res.json(result.rows);
@@ -187,6 +185,7 @@ app.get('/api/search', async (req, res) => {
     res.status(500).json({ message: 'Search failed' });
   }
 });
+
 
 // Get vendor by name
 app.get('/api/vendors/by-name/:vendorName', async (req, res) => {
@@ -206,12 +205,12 @@ app.get('/api/vendors/by-name/:vendorName', async (req, res) => {
   }
 });
 
-// Get products by vendor
+// Get products by vendor (only active ones)
 app.get('/api/vendor/:vendorId/products', async (req, res) => {
   const { vendorId } = req.params;
   try {
     const result = await pool.query(
-      'SELECT * FROM products WHERE vendor_id = $1',
+      'SELECT * FROM products WHERE vendor_id = $1 AND is_active = true',
       [vendorId]
     );
     res.json(result.rows);
@@ -220,6 +219,7 @@ app.get('/api/vendor/:vendorId/products', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+
 
 
 // Login Route
