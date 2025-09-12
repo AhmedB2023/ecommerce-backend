@@ -132,7 +132,8 @@ app.post('/api/products', async (req, res) => {
       [name, description, price, stock, vendor_id, roleCheck.rows[0].username]
     );
 
-    res.json(result.rows[0]);
+   res.json({ message: "✅ Product added successfully", product: result.rows[0] });
+
   } catch (err) {
     console.error('Error inserting product:', err.message);
     res.status(500).json({ error: 'Server error' });
