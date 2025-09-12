@@ -202,8 +202,8 @@ app.post('/api/login', async (req, res) => {
 
 
 
-// Register route
-app.post('/api/register', async (req, res) => {
+// SignUp route
+app.post('/api/signup', async (req, res) => {
   const { username, email, password, role } = req.body;
   try {
     const hashedPassword = await bcrypt.hash(password, 10);
