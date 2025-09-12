@@ -105,15 +105,14 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
-
 // Add new product (only vendors can insert)
 app.post('/api/products', async (req, res) => {
-  const { name, description, price, stock, vendor_id } = req.body;
+  const { name, description, price, stock = 0, vendor_id } = req.body;
 
   try {
     // ✅ Check that the user is a vendor
     const roleCheck = await pool.query(
-      'SELECT role FROM users WHERE id = $1',
+      'SELECT username, role FROM users WHERE id = $1',
       [vendor_id]
     );
 
@@ -125,12 +124,12 @@ app.post('/api/products', async (req, res) => {
       return res.status(403).json({ error: 'Only vendors can add products' });
     }
 
-    // ✅ Insert the product
+    // ✅ Insert product (include vendor_name from users table)
     const result = await pool.query(
-      `INSERT INTO products (name, description, price, stock, vendor_id)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO products (name, description, price, stock, vendor_id, vendor_name)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [name, description, price, stock, vendor_id]
+      [name, description, price, stock, vendor_id, roleCheck.rows[0].username]
     );
 
     res.json(result.rows[0]);
