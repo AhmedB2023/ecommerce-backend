@@ -147,7 +147,7 @@ app.get('/api/vendor/:vendorId/products', async (req, res) => {
   const { vendorId } = req.params;
   try {
     const result = await pool.query(
-      `SELECT * FROM users WHERE role = 'vendor' AND name ILIKE $1`,
+      'SELECT * FROM products WHERE vendor_id = $1',
       [vendorId]
     );
     res.json(result.rows);
