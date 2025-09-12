@@ -139,7 +139,34 @@ app.post('/api/products', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
-console.log("✅ /api/products POST route registered");
+
+// Delete a product (only vendors can delete their own products)
+app.delete('/api/products/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // ✅ Check if product exists
+    const check = await pool.query('SELECT * FROM products WHERE id = $1', [id]);
+    if (check.rows.length === 0) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+
+    // ✅ Delete product
+    const result = await pool.query(
+      'DELETE FROM products WHERE id = $1 RETURNING *',
+      [id]
+    );
+
+    res.json({
+      message: '✅ Product deleted successfully',
+      product: result.rows[0]
+    });
+  } catch (err) {
+    console.error('Error deleting product:', err.message);
+    res.status(500).json({ error: 'Server error while deleting product' });
+  }
+});
+
 
 // Search products
 app.get('/api/search', async (req, res) => {
