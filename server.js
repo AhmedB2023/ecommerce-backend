@@ -314,8 +314,8 @@ app.post('/api/reserve-order', async (req, res) => {
     await client.query('BEGIN');
 
     const { rows } = await client.query(
-      `INSERT INTO orders (user_id, total_price, guest_name, guest_contact, barcode)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO orders (user_id, vendor_id, total_price, guest_name, guest_contact, barcode)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
       [customer_id || null, total, guest_name, guest_contact, barcodeText]
     );
