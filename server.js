@@ -291,6 +291,44 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
+// Diplay  reservations
+app.get('/api/vendor/:vendorId/reservations', async (req, res) => {
+  const { vendorId } = req.params;
+
+  try {
+    const reservations = await pool.query(
+      `
+      SELECT
+        o.id AS order_id,
+        o.guest_name AS customer_name,
+        o.guest_contact AS contact,
+        o.created_at,
+        o.status,
+        SUM(oi.price * oi.quantity) AS total_price,
+        JSON_AGG(
+          JSON_BUILD_OBJECT(
+            'product_name', p.name,
+            'price', oi.price,
+            'quantity', oi.quantity
+          )
+        ) AS items
+      FROM orders o
+      JOIN order_items oi ON o.id = oi.order_id
+      JOIN products p ON oi.product_id = p.id
+      WHERE o.vendor_id = $1
+      GROUP BY o.id
+      ORDER BY o.created_at DESC
+      `,
+      [vendorId]
+    );
+
+    res.json(reservations.rows);
+  } catch (err) {
+    console.error("Error fetching vendor reservations:", err);
+    res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
 // Reserve orders
 app.post('/api/reserve-order', async (req, res) => {
   console.log('Incoming order request:', req.body); 
