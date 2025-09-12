@@ -176,7 +176,7 @@ app.get('/api/search', async (req, res) => {
        FROM products p
        JOIN users u ON p.vendor_id = u.id
        WHERE p.name ILIKE $1
-         AND p.is_active = true`,   -- //✅ Only show active products
+         AND p.is_active = true`,    //✅ Only show active products
       [`%${search}%`]
     );
     res.json(result.rows);
