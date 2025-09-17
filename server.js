@@ -384,11 +384,21 @@ app.post('/api/reserve-order', async (req, res) => {
       VALUES ($1, $2, $3, $4)
     `;
     for (const it of actualItems) {
+      const productId = it.product_id ?? it.id;
+  console.log("📦 Inserting order item:", {
+    orderId,
+    productId,
+    quantity: it.quantity,
+    price: it.price
+  });
       await client.query(insertItemSQL, [orderId, it.product_id ?? it.id, it.quantity, it.price]);
+       console.log("✅ Item inserted.");
     }
 
     await client.query('COMMIT');
-    return res.json({ success: true, orderId, barcodeText });
+   console.log("✅ Returning response:", { success: true, orderId, barcodeText });
+return res.json({ success: true, orderId, barcodeText });
+
   } catch (err) {
     await client.query('ROLLBACK');
      console.error('❌ reserve-order error:', err.message);
