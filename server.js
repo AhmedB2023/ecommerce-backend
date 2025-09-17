@@ -334,17 +334,28 @@ ORDER BY o.created_at DESC
 app.post('/api/reserve-order', async (req, res) => {
   console.log('Incoming order request:', req.body); 
 
+  // Accept both frontend and backend naming formats
   const {
     customer_id,
-    vendor_id,              // ✅ now extracted properly
-    items = [],
-    guest_name = null,
-    guest_contact = null,
+    userId,
+    vendor_id,
+    items,
+    products,
+    guest_name,
+    guestName,
+    guest_contact,
+    guestContact
   } = req.body;
 
-  console.log("👉 items received:", items);
+  // Safely fallback to correct variables
+  const actualCustomerId = customer_id ?? userId ?? null;
+  const actualItems = items ?? products ?? [];
+  const actualGuestName = guest_name ?? guestName ?? null;
+  const actualGuestContact = guest_contact ?? guestContact ?? null;
 
-  if (!Array.isArray(items) || items.length === 0) {
+  console.log("👉 items received:", actualItems);
+
+  if (!Array.isArray(actualItems) || actualItems.length === 0) {
     return res.status(400).json({ error: 'Missing items' });
   }
 
@@ -354,28 +365,26 @@ app.post('/api/reserve-order', async (req, res) => {
 
   const barcodeText = require("crypto").randomBytes(4).toString('hex');
 
-  const total = items.reduce((sum, it) => sum + Number(it.price) * Number(it.quantity), 0);
+  const total = actualItems.reduce((sum, it) => sum + Number(it.price) * Number(it.quantity), 0);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    // ✅ Now includes vendor_id
     const { rows } = await client.query(
       `INSERT INTO orders (user_id, vendor_id, total_price, guest_name, guest_contact, barcode)
        VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING id`,
-      [customer_id || null, vendor_id, total, guest_name, guest_contact, barcodeText]
+      [actualCustomerId, vendor_id, total, actualGuestName, actualGuestContact, barcodeText]
     );
     const orderId = rows[0].id;
 
-    // ✅ Confirm order_items are inserting correctly
     const insertItemSQL = `
       INSERT INTO order_items (order_id, product_id, quantity, price)
       VALUES ($1, $2, $3, $4)
     `;
-    for (const it of items) {
-      await client.query(insertItemSQL, [orderId, it.product_id, it.quantity, it.price]);
+    for (const it of actualItems) {
+      await client.query(insertItemSQL, [orderId, it.product_id ?? it.id, it.quantity, it.price]);
     }
 
     await client.query('COMMIT');
@@ -388,6 +397,7 @@ app.post('/api/reserve-order', async (req, res) => {
     client.release();
   }
 });
+
 
 
 
