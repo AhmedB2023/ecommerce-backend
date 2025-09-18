@@ -334,7 +334,6 @@ ORDER BY o.created_at DESC
 app.post('/api/reserve-order', async (req, res) => {
   console.log('Incoming order request:', req.body); 
 
-  // Accept both frontend and backend naming formats
   const {
     customer_id,
     userId,
@@ -347,7 +346,6 @@ app.post('/api/reserve-order', async (req, res) => {
     guestContact
   } = req.body;
 
-  // Safely fallback to correct variables
   const actualCustomerId = customer_id ?? userId ?? null;
   const actualItems = items ?? products ?? [];
   const actualGuestName = guest_name ?? guestName ?? null;
@@ -364,23 +362,22 @@ app.post('/api/reserve-order', async (req, res) => {
   }
 
   const barcodeText = require("crypto").randomBytes(4).toString('hex');
-
   const total = actualItems.reduce((sum, it) => sum + Number(it.price) * Number(it.quantity), 0);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-const vendorResult = await client.query(
-  'SELECT email FROM users WHERE id = $1 AND role = $2',
-  [vendor_id, 'vendor']
-);
+    const vendorResult = await client.query(
+      'SELECT email, username FROM users WHERE id = $1 AND role = $2',
+      [vendor_id, 'vendor']
+    );
+    const vendorEmail = vendorResult.rows[0]?.email;
+    const vendorName = vendorResult.rows[0]?.username;
 
-const vendorEmail = vendorResult.rows[0]?.email;
-
-if (!vendorEmail) {
-  console.warn("⚠️ No email found for vendor ID:", vendor_id);
-}
+    if (!vendorEmail) {
+      console.warn("⚠️ No email found for vendor ID:", vendor_id);
+    }
 
     const { rows } = await client.query(
       `INSERT INTO orders (user_id, vendor_id, total_price, guest_name, guest_contact, barcode)
@@ -396,24 +393,54 @@ if (!vendorEmail) {
     `;
     for (const it of actualItems) {
       const productId = it.product_id ?? it.id;
-  console.log("📦 Inserting order item:", {
-    orderId,
-    productId,
-    quantity: it.quantity,
-    price: it.price
-  });
-      await client.query(insertItemSQL, [orderId, it.product_id ?? it.id, it.quantity, it.price]);
-       console.log("✅ Item inserted.");
+      console.log("📦 Inserting order item:", {
+        orderId,
+        productId,
+        quantity: it.quantity,
+        price: it.price
+      });
+      await client.query(insertItemSQL, [orderId, productId, it.quantity, it.price]);
+      console.log("✅ Item inserted.");
     }
 
     await client.query('COMMIT');
-   console.log("✅ Returning response:", { success: true, orderId, barcodeText });
-return res.json({ success: true, orderId, barcodeText });
+
+    // 📤 EMAIL TO VENDOR
+    const SibApiV3Sdk = require('sib-api-v3-sdk');
+    const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+
+    const emailBody = `
+      <h2>New Reservation Received</h2>
+      <p><strong>Vendor:</strong> ${vendorName}</p>
+      <p><strong>Guest:</strong> ${actualGuestName}</p>
+      <p><strong>Contact:</strong> ${actualGuestContact}</p>
+      <p><strong>Order ID:</strong> ${orderId}</p>
+      <p><strong>Barcode:</strong> ${barcodeText}</p>
+      <p><strong>Total:</strong> $${total.toFixed(2)}</p>
+    `;
+
+    const sender = { name: "Tajer", email: "support@tajernow.com" };
+    const receivers = [{ email: vendorEmail }];
+
+    tranEmailApi.sendTransacEmail({
+      sender,
+      to: receivers,
+      subject: '🛒 New Reservation Alert - Tajer',
+      htmlContent: emailBody,
+    }).then(() => {
+      console.log("✅ Email sent to vendor:", vendorEmail);
+    }).catch((error) => {
+      console.error("❌ Failed to send email:", error.message);
+    });
+
+    // ✅ Return response
+    console.log("✅ Returning response:", { success: true, orderId, barcodeText });
+    return res.json({ success: true, orderId, barcodeText });
 
   } catch (err) {
     await client.query('ROLLBACK');
-     console.error('❌ reserve-order error:', err.message);
-     console.error('📄 Full error stack:', err.stack);
+    console.error('❌ reserve-order error:', err.message);
+    console.error('📄 Full error stack:', err.stack);
     return res.status(500).json({ error: 'Order failed' });
   } finally {
     client.release();
