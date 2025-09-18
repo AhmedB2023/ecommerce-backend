@@ -371,6 +371,19 @@ app.post('/api/reserve-order', async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    // 🔵 STEP 1: Lookup vendor email & name
+    const vendorResult = await client.query(
+      'SELECT email, name FROM vendors WHERE id = $1',
+      [vendor_id]
+    );
+
+    const vendorEmail = vendorResult.rows[0]?.email;
+    const vendorName = vendorResult.rows[0]?.name;
+
+    if (!vendorEmail) {
+      console.warn("⚠️ No email found for vendor:", vendor_id);
+    }
+
     const { rows } = await client.query(
       `INSERT INTO orders (user_id, vendor_id, total_price, guest_name, guest_contact, barcode)
        VALUES ($1, $2, $3, $4, $5, $6)
