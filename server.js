@@ -298,44 +298,44 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-// Diplay  reservations
+// Display reservations for vendor with full item details
 app.get('/api/vendor/:vendorId/reservations', async (req, res) => {
   const { vendorId } = req.params;
 
   try {
-    const reservations = await pool.query(
+    const { rows } = await pool.query(
       `
-     SELECT
-  o.id AS id,                                -- ✅ frontend expects 'id'
-  o.guest_name AS guest_name,                -- ✅ frontend expects 'guest_name'
-  o.guest_contact AS guest_contact,
-  o.created_at,
-  o.status,
-  SUM(oi.price * oi.quantity) AS total_price,
-  JSON_AGG(
-    JSON_BUILD_OBJECT(
-      'product_name', p.name,
-      'price', oi.price,
-      'quantity', oi.quantity
-    )
-  ) AS items
-FROM orders o
-JOIN order_items oi ON o.id = oi.order_id
-JOIN products p ON oi.product_id = p.id
-WHERE o.vendor_id = $1
-GROUP BY o.id
-ORDER BY o.created_at DESC
-
+      SELECT
+        o.id AS id,
+        o.guest_name,
+        o.guest_contact,
+        o.created_at,
+        o.status,
+        SUM(oi.price * oi.quantity)::numeric(10, 2) AS total_price,
+        JSON_AGG(
+          JSON_BUILD_OBJECT(
+            'product_name', p.name,
+            'price', oi.price,
+            'quantity', oi.quantity
+          )
+        ) AS items
+      FROM orders o
+      JOIN order_items oi ON o.id = oi.order_id
+      JOIN products p ON oi.product_id = p.id
+      WHERE o.vendor_id = $1
+      GROUP BY o.id, o.guest_name, o.guest_contact, o.created_at, o.status
+      ORDER BY o.created_at DESC
       `,
       [vendorId]
     );
 
-    res.json(reservations.rows);
+    res.json(rows);
   } catch (err) {
-    console.error("Error fetching vendor reservations:", err);
+    console.error("❌ Error fetching vendor reservations:", err.message);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 
 // Reserve orders
 app.post('/api/reserve-order', async (req, res) => {
