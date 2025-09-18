@@ -372,12 +372,11 @@ app.post('/api/reserve-order', async (req, res) => {
     await client.query('BEGIN');
 
 const vendorResult = await client.query(
-  'SELECT email, name FROM users WHERE id = $1 AND role = $2',
+  'SELECT email FROM users WHERE id = $1 AND role = $2',
   [vendor_id, 'vendor']
 );
 
 const vendorEmail = vendorResult.rows[0]?.email;
-const vendorName = vendorResult.rows[0]?.name;
 
 if (!vendorEmail) {
   console.warn("⚠️ No email found for vendor ID:", vendor_id);
