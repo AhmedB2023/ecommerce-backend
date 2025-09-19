@@ -100,11 +100,12 @@ app.get('/api/products', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT p.id, p.name, p.price, p.description, p.vendor_id, 
+             p.image_url,              -- ✅ include image
              u.username AS vendor_name
       FROM products p
       JOIN users u ON p.vendor_id = u.id
       WHERE u.role = 'vendor'
-        AND p.is_active = true     -- ✅ Only return active products
+        AND p.is_active = true
     `);
     res.json(result.rows);
   } catch (err) {
@@ -112,6 +113,7 @@ app.get('/api/products', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
+
 
 
 // Add new product (only vendors can insert)
