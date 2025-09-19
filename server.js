@@ -426,6 +426,8 @@ app.post('/api/reserve-order', async (req, res) => {
       <p><strong>Order ID:</strong> ${orderId}</p>
       <p><strong>Barcode:</strong> ${barcodeText}</p>
       <p><strong>Total:</strong> $${total.toFixed(2)}</p>
+      <h3>Products:</h3>
+       <ul>${itemsListHtml}</ul>
     `;
 
     const sender = { name: "Tajer", email: "support@tajernow.com" };
