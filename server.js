@@ -412,6 +412,19 @@ app.post('/api/reserve-order', async (req, res) => {
       console.log("✅ Item inserted.");
     }
 
+    // 🔑 Fetch product names for this order
+    const itemsResult = await client.query(
+      `SELECT p.name, oi.quantity
+       FROM order_items oi
+       JOIN products p ON oi.product_id = p.id
+       WHERE oi.order_id = $1`,
+      [orderId]
+    );
+
+    const itemsListHtml = itemsResult.rows
+      .map(item => `<li>${item.name} (x${item.quantity})</li>`)
+      .join("");
+
     await client.query('COMMIT');
 
     // 📤 EMAIL TO VENDOR
@@ -427,7 +440,7 @@ app.post('/api/reserve-order', async (req, res) => {
       <p><strong>Barcode:</strong> ${barcodeText}</p>
       <p><strong>Total:</strong> $${total.toFixed(2)}</p>
       <h3>Products:</h3>
-       <ul>${itemsListHtml}</ul>
+      <ul>${itemsListHtml}</ul>
     `;
 
     const sender = { name: "Tajer", email: "support@tajernow.com" };
