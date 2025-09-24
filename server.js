@@ -67,7 +67,7 @@ async function ensureSchema() {
       barcode TEXT,
       guest_name TEXT,
       guest_contact TEXT,
-      total_monthly_rent  NUMERIC(10,2),
+      monthly_rent  NUMERIC(10,2),
       status VARCHAR(20) DEFAULT 'pending',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -251,7 +251,7 @@ app.get('/api/landlord/:landlordId/reservations', async (req, res) => {
     const { rows } = await pool.query(
       `
       SELECT o.id AS id, o.guest_name, o.guest_contact, o.created_at, o.status,
-             SUM(oi.monthly_rent * oi.quantity)::numeric(10, 2) AS total_monthly_rent,
+             SUM(oi.monthly_rent * oi.quantity)::numeric(10, 2) AS monthly_rent,
              JSON_AGG(JSON_BUILD_OBJECT(
                'property_name', p.name,
                'monthly_rent', oi.monthly_rent,
@@ -319,7 +319,7 @@ app.post('/api/reserve-order', async (req, res) => {
 
     // Insert reservation
     const { rows } = await client.query(
-      `INSERT INTO reservations (guest_name, guest_contact, landlord_id, total_monthly_rent, created_at)
+      `INSERT INTO reservations (guest_name, guest_contact, landlord_id, monthly_rent, created_at)
        VALUES ($1, $2, $3, $4, NOW())
        RETURNING id`,
       [actualGuestName, actualGuestContact, landlord_id, total]
