@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 // 📧 Brevo setup
 const SibApiV3Sdk = require('sib-api-v3-sdk');
@@ -9,7 +8,6 @@ const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 
 console.log("🔍 APP_BASE_URL from .env:", process.env.APP_BASE_URL);
 
-
 if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config();
 }
@@ -19,12 +17,8 @@ const cors = require('cors');
 const pool = require('./db');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
-const bwipjs = require('bwip-js');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const sendResetEmail = require('./utils/sendEmail');
 const crypto = require('crypto');
-
-
+const sendResetEmail = require('./utils/sendEmail');
 
 const app = express();
 
@@ -41,14 +35,10 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true,
 }));
-
-
 app.options('*', cors());
-
-
 app.use(express.json());
 
-// Ensure DB schema
+// ✅ Ensure DB schema
 async function ensureSchema() {
   const sql = `
     CREATE TABLE IF NOT EXISTS users (
@@ -56,56 +46,56 @@ async function ensureSchema() {
       username VARCHAR(50) NOT NULL,
       email VARCHAR(100) NOT NULL UNIQUE,
       password TEXT NOT NULL,
-      role VARCHAR(20) DEFAULT 'customer',
+      role VARCHAR(20) DEFAULT 'tenant',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
-    CREATE TABLE IF NOT EXISTS products (
+    CREATE TABLE IF NOT EXISTS properties (
       id SERIAL PRIMARY KEY,
       name VARCHAR(100) NOT NULL,
       description TEXT,
       price NUMERIC(10,2),
-      vendor_id INTEGER REFERENCES users(id),
+      landlord_id INTEGER REFERENCES users(id),
+      is_active BOOLEAN DEFAULT true,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS orders (
       id UUID PRIMARY KEY,
-      customer_id INTEGER,
-      vendor_id INTEGER REFERENCES users(id),
+      tenant_id INTEGER,
+      landlord_id INTEGER REFERENCES users(id),
       barcode TEXT,
       guest_name TEXT,
       guest_contact TEXT,
+      total_price NUMERIC(10,2),
+      status VARCHAR(20) DEFAULT 'pending',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
     CREATE TABLE IF NOT EXISTS order_items (
       id SERIAL PRIMARY KEY,
       order_id UUID REFERENCES orders(id),
-      product_id INTEGER REFERENCES products(id),
-      quantity INTEGER
+      property_id INTEGER REFERENCES properties(id),
+      quantity INTEGER,
+      price NUMERIC(10,2)
     );
   `;
   await pool.query(sql);
 }
 ensureSchema();
 
-// Test route
-app.get('/test', (req, res) => {
-  res.send('✅ Test route is working!');
-});
+// ✅ Test route
+app.get('/test', (req, res) => res.send('✅ Test route is working!'));
 
-// Get all active products
-app.get('/api/products', async (req, res) => {
+// ✅ Get all active properties
+app.get('/api/properties', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT p.id, p.name, p.price, p.description, p.vendor_id, 
-             p.image_url,              -- ✅ include image
-             u.username AS vendor_name
-      FROM products p
-      JOIN users u ON p.vendor_id = u.id
-      WHERE u.role = 'vendor'
-        AND p.is_active = true
+      SELECT p.id, p.name, p.price, p.description, p.landlord_id,
+             u.username AS landlord_name
+      FROM properties p
+      JOIN users u ON p.landlord_id = u.id
+      WHERE u.role = 'landlord' AND p.is_active = true
     `);
     res.json(result.rows);
   } catch (err) {
@@ -114,78 +104,64 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
-
-
-// Add new product (only vendors can insert)
-app.post('/api/products', async (req, res) => {
-  const { name, description, price, stock = 0, vendor_id } = req.body;
-
+// ✅ Add property (landlord only)
+app.post('/api/properties', async (req, res) => {
+  const { name, description, price, landlord_id } = req.body;
   try {
-    // ✅ Check that the user is a vendor
     const roleCheck = await pool.query(
       'SELECT username, role FROM users WHERE id = $1',
-      [vendor_id]
+      [landlord_id]
     );
 
     if (roleCheck.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
-
-    if (roleCheck.rows[0].role !== 'vendor') {
-      return res.status(403).json({ error: 'Only vendors can add products' });
+    if (roleCheck.rows[0].role !== 'landlord') {
+      return res.status(403).json({ error: 'Only landlords can add properties' });
     }
 
-    // ✅ Insert product (include vendor_name from users table)
     const result = await pool.query(
-      `INSERT INTO products (name, description, price, stock, vendor_id, vendor_name)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO properties (name, description, price, landlord_id)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [name, description, price, stock, vendor_id, roleCheck.rows[0].username]
+      [name, description, price, landlord_id]
     );
 
-   res.json({ message: "✅ Product added successfully", product: result.rows[0] });
-
+    res.json({ message: "✅ Property added successfully", property: result.rows[0] });
   } catch (err) {
-    console.error('Error inserting product:', err.message);
+    console.error('Error inserting property:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// Soft delete a product
-app.delete('/api/products/:id', async (req, res) => {
+// ✅ Soft delete property
+app.delete('/api/properties/:id', async (req, res) => {
   const { id } = req.params;
-
   try {
     const result = await pool.query(
-      'UPDATE products SET is_active = false WHERE id = $1 RETURNING *',
+      'UPDATE properties SET is_active = false WHERE id = $1 RETURNING *',
       [id]
     );
-
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Product not found or already deleted' });
+      return res.status(404).json({ message: 'Property not found or already deleted' });
     }
-
-    res.json({ message: 'Product soft-deleted successfully', product: result.rows[0] });
+    res.json({ message: 'Property soft-deleted successfully', property: result.rows[0] });
   } catch (error) {
-    console.error('Error soft-deleting product:', error);
+    console.error('Error soft-deleting property:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-
-
-// Search products
+// ✅ Search properties
 app.get('/api/search', async (req, res) => {
   const search = (req.query.query || '').trim();
   if (!search) return res.json([]);
-
   try {
     const result = await pool.query(
-      `SELECT p.id, p.name, p.price, p.description, p.vendor_id, u.username AS vendor_name
-       FROM products p
-       JOIN users u ON p.vendor_id = u.id
-       WHERE p.name ILIKE $1
-         AND p.is_active = true`,    //✅ Only show active products
+      `SELECT p.id, p.name, p.price, p.description, p.landlord_id, u.username AS landlord_name
+       FROM properties p
+       JOIN users u ON p.landlord_id = u.id
+       WHERE p.name ILIKE $1 AND p.is_active = true`,
       [`%${search}%`]
     );
     res.json(result.rows);
@@ -195,307 +171,223 @@ app.get('/api/search', async (req, res) => {
   }
 });
 
-
-// Get vendor by name
-app.get('/api/vendors/by-name/:vendorName', async (req, res) => {
-  const { vendorName } = req.params;
+// ✅ Get landlord by name
+app.get('/api/landlord/by-name/:landlordName', async (req, res) => {
+  const { landlordName } = req.params;
   try {
     const result = await pool.query(
-      `SELECT id, username AS name, email FROM users WHERE username = $1 AND role = 'vendor'`,
-      [vendorName]
+      `SELECT id, username AS name, email FROM users WHERE username = $1 AND role = 'landlord'`,
+      [landlordName]
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: 'Vendor not found' });
+      return res.status(404).json({ message: 'Landlord not found' });
     }
     res.json(result.rows[0]);
   } catch (error) {
-    console.error('Error fetching vendor by name:', error);
+    console.error('Error fetching landlord by name:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-// Get products by vendor (only active ones)
-app.get('/api/vendor/:vendorId/products', async (req, res) => {
-  const { vendorId } = req.params;
+// ✅ Get properties by landlord
+app.get('/api/landlord/:landlordId/properties', async (req, res) => {
+  const { landlordId } = req.params;
   try {
     const result = await pool.query(
-      'SELECT * FROM products WHERE vendor_id = $1 AND is_active = true',
-      [vendorId]
+      'SELECT * FROM properties WHERE landlord_id = $1 AND is_active = true',
+      [landlordId]
     );
     res.json(result.rows);
   } catch (error) {
-    console.error('Error fetching vendor products:', error);
+    console.error('Error fetching landlord properties:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-
-
-// Login Route
+// ✅ Login
 app.post('/api/login', async (req, res) => {
   const { email, password } = req.body;
-
-  if (!email || !password) {
-    console.log("❌ Missing email or password");
-    return res.status(400).json({ message: "Email and password are required." });
-  }
+  if (!email || !password) return res.status(400).json({ message: "Email and password required." });
 
   try {
     const result = await pool.query(`SELECT * FROM users WHERE email = $1`, [email]);
     const user = result.rows[0];
-
-    if (!user) {
-      console.log(`❌ Login failed — email not found: ${email}`);
-      return res.status(401).json({ message: "Email not found." });
-    }
+    if (!user) return res.status(401).json({ message: "Email not found." });
 
     const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      console.log(`❌ Login failed — incorrect password for ${email}`);
-      return res.status(401).json({ message: "Incorrect password." });
-    }
+    if (!isMatch) return res.status(401).json({ message: "Incorrect password." });
 
-    console.log(`✅ Login successful for ${email}`);
-
-    // ✅ Wrap user in `user` key
-    res.json({
-      user: {
-        id: user.id,
-        username: user.username,
-        email: user.email,
-        role: user.role
-      }
-    });
-
+    res.json({ user: { id: user.id, username: user.username, email: user.email, role: user.role } });
   } catch (err) {
     console.error('🔥 Login error:', err.message);
     res.status(500).json({ message: "Server error during login." });
   }
 });
 
-
-// SignUp Route
+// ✅ Signup
 app.post('/api/signup', async (req, res) => {
   const { username, email, password, role } = req.body;
-
   try {
-    // Check if email already exists
     const emailCheck = await pool.query(`SELECT id FROM users WHERE email = $1`, [email]);
     if (emailCheck.rows.length > 0) {
       return res.status(400).json({ message: 'Email is already registered.' });
     }
-
-    // Hash password and insert user
     const hashedPassword = await bcrypt.hash(password, 10);
     await pool.query(
       `INSERT INTO users (username, email, password, role) VALUES ($1, $2, $3, $4)`,
       [username, email, hashedPassword, role]
     );
-
     res.status(201).json({ message: 'User registered successfully!' });
-
   } catch (err) {
     console.error('Signup error:', err.message);
     res.status(500).json({ message: 'Signup failed' });
   }
 });
 
-// Display reservations for vendor with full item details
-app.get('/api/vendor/:vendorId/reservations', async (req, res) => {
-  const { vendorId } = req.params;
-
+// ✅ Landlord reservations
+app.get('/api/landlord/:landlordId/reservations', async (req, res) => {
+  const { landlordId } = req.params;
   try {
     const { rows } = await pool.query(
       `
-      SELECT
-        o.id AS id,
-        o.guest_name,
-        o.guest_contact,
-        o.created_at,
-        o.status,
-        SUM(oi.price * oi.quantity)::numeric(10, 2) AS total_price,
-        JSON_AGG(
-          JSON_BUILD_OBJECT(
-            'product_name', p.name,
-            'price', oi.price,
-            'quantity', oi.quantity
-          )
-        ) AS items
+      SELECT o.id AS id, o.guest_name, o.guest_contact, o.created_at, o.status,
+             SUM(oi.price * oi.quantity)::numeric(10, 2) AS total_price,
+             JSON_AGG(JSON_BUILD_OBJECT(
+               'property_name', p.name,
+               'price', oi.price,
+               'quantity', oi.quantity
+             )) AS items
       FROM orders o
       JOIN order_items oi ON o.id = oi.order_id
-      JOIN products p ON oi.product_id = p.id
-      WHERE o.vendor_id = $1
+      JOIN properties p ON oi.property_id = p.id
+      WHERE o.landlord_id = $1
       GROUP BY o.id, o.guest_name, o.guest_contact, o.created_at, o.status
       ORDER BY o.created_at DESC
       `,
-      [vendorId]
+      [landlordId]
     );
-
     res.json(rows);
   } catch (err) {
-    console.error("❌ Error fetching vendor reservations:", err.message);
+    console.error("❌ Error fetching landlord reservations:", err.message);
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
 
-
-// Reserve orders
+// ✅ Reserve property (tenant -> landlord)
 app.post('/api/reserve-order', async (req, res) => {
-  console.log('Incoming order request:', req.body); 
+  console.log('Incoming rental request:', req.body);
 
   const {
-    customer_id,
+    tenant_id,
     userId,
-    vendor_id,
+    landlord_id,
+    properties,
     items,
-    products,
     guest_name,
     guestName,
     guest_contact,
     guestContact
   } = req.body;
 
-  const actualCustomerId = customer_id ?? userId ?? null;
-  const actualItems = items ?? products ?? [];
+  const actualTenantId = tenant_id ?? userId ?? null;
+  const actualItems = properties ?? items ?? [];
   const actualGuestName = guest_name ?? guestName ?? null;
   const actualGuestContact = guest_contact ?? guestContact ?? null;
 
-  console.log("👉 items received:", actualItems);
-
   if (!Array.isArray(actualItems) || actualItems.length === 0) {
-    return res.status(400).json({ error: 'Missing items' });
+    return res.status(400).json({ error: 'Missing properties' });
   }
+  if (!landlord_id) return res.status(400).json({ error: 'Missing landlord_id' });
 
-  if (!vendor_id) {
-    return res.status(400).json({ error: 'Missing vendor_id' });
-  }
-
-  const barcodeText = require("crypto").randomBytes(4).toString('hex');
-  const total = actualItems.reduce((sum, it) => sum + Number(it.price) * Number(it.quantity), 0);
+  const barcodeText = crypto.randomBytes(4).toString('hex');
+  const total = actualItems.reduce(
+    (sum, it) => sum + Number(it.price) * Number(it.quantity),
+    0
+  );
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
 
-    const vendorResult = await client.query(
+    // Get landlord info
+    const landlordResult = await client.query(
       'SELECT email, username FROM users WHERE id = $1 AND role = $2',
-      [vendor_id, 'vendor']
+      [landlord_id, 'landlord']
     );
-    const vendorEmail = vendorResult.rows[0]?.email;
-    const vendorName = vendorResult.rows[0]?.username;
+    const landlordEmail = landlordResult.rows[0]?.email;
+    const landlordName = landlordResult.rows[0]?.username;
 
-    if (!vendorEmail) {
-      console.warn("⚠️ No email found for vendor ID:", vendor_id);
-    }
-
+    // Insert reservation
     const { rows } = await client.query(
-      `INSERT INTO orders (user_id, vendor_id, total_price, guest_name, guest_contact, barcode)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO reservations (guest_name, guest_contact, landlord_id, total_price, created_at)
+       VALUES ($1, $2, $3, $4, NOW())
        RETURNING id`,
-      [actualCustomerId, vendor_id, total, actualGuestName, actualGuestContact, barcodeText]
+      [actualGuestName, actualGuestContact, landlord_id, total]
     );
-    const orderId = rows[0].id;
+    const reservationId = rows[0].id;
 
+    // Insert reservation items
     const insertItemSQL = `
-      INSERT INTO order_items (order_id, product_id, quantity, price)
+      INSERT INTO reservation_items (reservation_id, property_id, quantity, price)
       VALUES ($1, $2, $3, $4)
     `;
     for (const it of actualItems) {
-      const productId = it.product_id ?? it.id;
-      console.log("📦 Inserting order item:", {
-        orderId,
-        productId,
-        quantity: it.quantity,
-        price: it.price
-      });
-      await client.query(insertItemSQL, [orderId, productId, it.quantity, it.price]);
-      console.log("✅ Item inserted.");
+      const propertyId = it.property_id ?? it.id;
+      await client.query(insertItemSQL, [
+        reservationId,
+        propertyId,
+        it.quantity,
+        it.price,
+      ]);
     }
-
-    // 🔑 Fetch product names for this order
-    const itemsResult = await client.query(
-      `SELECT p.name, oi.quantity
-       FROM order_items oi
-       JOIN products p ON oi.product_id = p.id
-       WHERE oi.order_id = $1`,
-      [orderId]
-    );
-
-    const itemsListHtml = itemsResult.rows
-      .map(item => `<li>${item.name} (x${item.quantity})</li>`)
-      .join("");
 
     await client.query('COMMIT');
 
-    // 📤 EMAIL TO VENDOR
-    const SibApiV3Sdk = require('sib-api-v3-sdk');
-    const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+    // 📤 Email landlord
+    if (landlordEmail) {
+      const emailBody = `
+        <h2>New Rental Reservation</h2>
+        <p><strong>Landlord:</strong> ${landlordName}</p>
+        <p><strong>Guest:</strong> ${actualGuestName}</p>
+        <p><strong>Contact:</strong> ${actualGuestContact}</p>
+        <p><strong>Reservation ID:</strong> ${reservationId}</p>
+        <p><strong>Barcode:</strong> ${barcodeText}</p>
+        <p><strong>Total:</strong> $${total.toFixed(2)}</p>
+      `;
+      await tranEmailApi.sendTransacEmail({
+        sender: { name: "Tajer Rentals", email: "support@tajernow.com" },
+        to: [{ email: landlordEmail }],
+        subject: "🏠 New Rental Reservation",
+        htmlContent: emailBody,
+      });
+    }
 
-    const emailBody = `
-      <h2>New Reservation Received</h2>
-      <p><strong>Vendor:</strong> ${vendorName}</p>
-      <p><strong>Guest:</strong> ${actualGuestName}</p>
-      <p><strong>Contact:</strong> ${actualGuestContact}</p>
-      <p><strong>Order ID:</strong> ${orderId}</p>
-      <p><strong>Barcode:</strong> ${barcodeText}</p>
-      <p><strong>Total:</strong> $${total.toFixed(2)}</p>
-      <h3>Products:</h3>
-      <ul>${itemsListHtml}</ul>
-    `;
-
-    const sender = { name: "Tajer", email: "support@tajernow.com" };
-    const receivers = [{ email: vendorEmail }];
-
-    tranEmailApi.sendTransacEmail({
-      sender,
-      to: receivers,
-      subject: '🛒 New Reservation Alert - Tajer',
-      htmlContent: emailBody,
-    }).then(() => {
-      console.log("✅ Email sent to vendor:", vendorEmail);
-    }).catch((error) => {
-      console.error("❌ Failed to send email:", error.message);
-    });
-
-    // ✅ Return response
-    console.log("✅ Returning response:", { success: true, orderId, barcodeText });
-    return res.json({ success: true, orderId, barcodeText });
-
+    res.json({ success: true, reservationId, barcodeText });
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('❌ reserve-order error:', err.message);
-    console.error('📄 Full error stack:', err.stack);
-    return res.status(500).json({ error: 'Order failed' });
+    res.status(500).json({ error: 'Reservation failed' });
   } finally {
     client.release();
   }
 });
 
 
-
-
-
-// Get all orders (grouped)
+// ✅ Get tenant orders
 app.get('/api/orders', async (req, res) => {
   const { userId } = req.query;
   try {
     const result = await pool.query(
       `
-      SELECT 
-        o.id AS order_id,
-        o.vendor_id,
-        o.customer_id,
-        o.barcode,
-        o.guest_name,
-        o.guest_contact,
-        o.created_at,
-        json_agg(json_build_object(
-          'product_id', oi.product_id,
-          'quantity', oi.quantity
-        )) AS order_items
+      SELECT o.id AS order_id, o.landlord_id, o.tenant_id, o.barcode,
+             o.guest_name, o.guest_contact, o.created_at,
+             json_agg(json_build_object(
+               'property_id', oi.property_id,
+               'quantity', oi.quantity
+             )) AS order_items
       FROM orders o
       LEFT JOIN order_items oi ON o.id = oi.order_id
-      WHERE o.customer_id = $1
+      WHERE o.tenant_id = $1
       GROUP BY o.id
       ORDER BY o.created_at DESC
       `,
@@ -508,22 +400,7 @@ app.get('/api/orders', async (req, res) => {
   }
 });
 
-// Get order by ID
-app.get('/api/orders/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const result = await pool.query(
-      `SELECT * FROM orders WHERE id = $1`,
-      [id]
-    );
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error('Order fetch error:', err.message);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-// Forgot password
+// ✅ Forgot password
 app.post('/api/forgot-password', async (req, res) => {
   const { email } = req.body;
   try {
@@ -532,8 +409,6 @@ app.post('/api/forgot-password', async (req, res) => {
 
     const token = uuidv4();
     const resetLink = `${process.env.APP_BASE_URL}/reset-password?token=${token}`;
-    console.log("👉 Reset email to:", email);
-  console.log("👉 Reset link:", resetLink);
     await sendResetEmail(email, resetLink);
 
     res.json({ message: 'Password reset email sent' });
@@ -543,34 +418,25 @@ app.post('/api/forgot-password', async (req, res) => {
   }
 });
 
-// Secure password reset using token
+// ✅ Reset password
 app.post('/api/reset-password', async (req, res) => {
   const { token, newPassword } = req.body;
-
-  if (!token || !newPassword) {
-    return res.status(400).json({ message: 'Token and new password required.' });
-  }
+  if (!token || !newPassword) return res.status(400).json({ message: 'Token and new password required.' });
 
   try {
-    // Find user by valid token
     const userResult = await pool.query(
       `SELECT * FROM users WHERE reset_token = $1 AND reset_token_expires > NOW()`,
       [token]
     );
-
     if (userResult.rows.length === 0) {
       return res.status(400).json({ message: 'Invalid or expired token.' });
     }
-
     const user = userResult.rows[0];
-
-    // Hash and update password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     await pool.query(
       `UPDATE users SET password = $1, reset_token = NULL, reset_token_expires = NULL WHERE id = $2`,
       [hashedPassword, user.id]
     );
-
     res.json({ message: 'Password updated successfully!' });
   } catch (err) {
     console.error('Reset error:', err.message);
@@ -578,8 +444,7 @@ app.post('/api/reset-password', async (req, res) => {
   }
 });
 
-
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
-  console.log(`✅ Backend server is running on port ${PORT}`);
+  console.log(`✅ Backend server running on port ${PORT}`);
 });
