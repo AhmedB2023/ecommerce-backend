@@ -54,7 +54,7 @@ async function ensureSchema() {
       id SERIAL PRIMARY KEY,
       name VARCHAR(100) NOT NULL,
       description TEXT,
-      price NUMERIC(10,2),
+      monthly_rent  NUMERIC(10,2),
       landlord_id INTEGER REFERENCES users(id),
       is_active BOOLEAN DEFAULT true,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -67,7 +67,7 @@ async function ensureSchema() {
       barcode TEXT,
       guest_name TEXT,
       guest_contact TEXT,
-      total_price NUMERIC(10,2),
+      total_monthly_rent  NUMERIC(10,2),
       status VARCHAR(20) DEFAULT 'pending',
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
@@ -77,7 +77,7 @@ async function ensureSchema() {
       order_id UUID REFERENCES orders(id),
       property_id INTEGER REFERENCES properties(id),
       quantity INTEGER,
-      price NUMERIC(10,2)
+      monthly_rent  NUMERIC(10,2)
     );
   `;
   await pool.query(sql);
@@ -91,7 +91,7 @@ app.get('/test', (req, res) => res.send('✅ Test route is working!'));
 app.get('/api/properties', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT p.id, p.name, p.price, p.description, p.landlord_id,
+      SELECT p.id, p.name, p.monthly_rent, p.description, p.landlord_id,
              u.username AS landlord_name
       FROM properties p
       JOIN users u ON p.landlord_id = u.id
@@ -106,7 +106,7 @@ app.get('/api/properties', async (req, res) => {
 
 // ✅ Add property (landlord only)
 app.post('/api/properties', async (req, res) => {
-  const { name, description, price, landlord_id } = req.body;
+  const { name, description, monthly_rent , landlord_id } = req.body;
   try {
     const roleCheck = await pool.query(
       'SELECT username, role FROM users WHERE id = $1',
@@ -121,10 +121,10 @@ app.post('/api/properties', async (req, res) => {
     }
 
     const result = await pool.query(
-      `INSERT INTO properties (name, description, price, landlord_id)
+      `INSERT INTO properties (name, description, monthly_rent , landlord_id)
        VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [name, description, price, landlord_id]
+      [name, description, monthly_rent , landlord_id]
     );
 
     res.json({ message: "✅ Property added successfully", property: result.rows[0] });
@@ -158,7 +158,7 @@ app.get('/api/search', async (req, res) => {
   if (!search) return res.json([]);
   try {
     const result = await pool.query(
-      `SELECT p.id, p.name, p.price, p.description, p.landlord_id, u.username AS landlord_name
+      `SELECT p.id, p.name, p.monthly_rent , p.description, p.landlord_id, u.username AS landlord_name
        FROM properties p
        JOIN users u ON p.landlord_id = u.id
        WHERE p.name ILIKE $1 AND p.is_active = true`,
@@ -251,10 +251,10 @@ app.get('/api/landlord/:landlordId/reservations', async (req, res) => {
     const { rows } = await pool.query(
       `
       SELECT o.id AS id, o.guest_name, o.guest_contact, o.created_at, o.status,
-             SUM(oi.price * oi.quantity)::numeric(10, 2) AS total_price,
+             SUM(oi.monthly_rent * oi.quantity)::numeric(10, 2) AS total_monthly_rent,
              JSON_AGG(JSON_BUILD_OBJECT(
                'property_name', p.name,
-               'price', oi.price,
+               'monthly_rent', oi.monthly_rent,
                'quantity', oi.quantity
              )) AS items
       FROM orders o
@@ -301,7 +301,7 @@ app.post('/api/reserve-order', async (req, res) => {
 
   const barcodeText = crypto.randomBytes(4).toString('hex');
   const total = actualItems.reduce(
-    (sum, it) => sum + Number(it.price) * Number(it.quantity),
+    (sum, it) => sum + Number(it.monthly_rent) * Number(it.quantity),
     0
   );
 
@@ -319,7 +319,7 @@ app.post('/api/reserve-order', async (req, res) => {
 
     // Insert reservation
     const { rows } = await client.query(
-      `INSERT INTO reservations (guest_name, guest_contact, landlord_id, total_price, created_at)
+      `INSERT INTO reservations (guest_name, guest_contact, landlord_id, total_monthly_rent, created_at)
        VALUES ($1, $2, $3, $4, NOW())
        RETURNING id`,
       [actualGuestName, actualGuestContact, landlord_id, total]
@@ -328,7 +328,7 @@ app.post('/api/reserve-order', async (req, res) => {
 
     // Insert reservation items
     const insertItemSQL = `
-      INSERT INTO reservation_items (reservation_id, property_id, quantity, price)
+      INSERT INTO reservation_items (reservation_id, property_id, quantity, monthly_rent)
       VALUES ($1, $2, $3, $4)
     `;
     for (const it of actualItems) {
@@ -337,7 +337,7 @@ app.post('/api/reserve-order', async (req, res) => {
         reservationId,
         propertyId,
         it.quantity,
-        it.price,
+        it.monthly_rent,
       ]);
     }
 
