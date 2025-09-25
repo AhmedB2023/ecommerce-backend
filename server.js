@@ -244,25 +244,26 @@ app.post('/api/signup', async (req, res) => {
   }
 });
 
-// ✅ Landlord reservations
+
+// ✅ Landlord reservations (rental system)
 app.get('/api/landlord/:landlordId/reservations', async (req, res) => {
   const { landlordId } = req.params;
   try {
     const { rows } = await pool.query(
       `
-      SELECT o.id AS id, o.guest_name, o.guest_contact, o.created_at, o.status,
-             SUM(oi.monthly_rent * oi.quantity)::numeric(10, 2) AS monthly_rent,
+      SELECT r.id AS id, r.guest_name, r.guest_contact, r.created_at,
+             SUM(ri.monthly_rent * ri.quantity)::numeric(10, 2) AS monthly_rent,
              JSON_AGG(JSON_BUILD_OBJECT(
                'property_name', p.name,
-               'monthly_rent', oi.monthly_rent,
-               'quantity', oi.quantity
+               'monthly_rent', ri.monthly_rent,
+               'quantity', ri.quantity
              )) AS items
-      FROM orders o
-      JOIN order_items oi ON o.id = oi.order_id
-      JOIN properties p ON oi.property_id = p.id
-      WHERE o.landlord_id = $1
-      GROUP BY o.id, o.guest_name, o.guest_contact, o.created_at, o.status
-      ORDER BY o.created_at DESC
+      FROM reservations r
+      JOIN reservation_items ri ON r.id = ri.reservation_id
+      JOIN properties p ON ri.property_id = p.id
+      WHERE r.landlord_id = $1
+      GROUP BY r.id, r.guest_name, r.guest_contact, r.created_at
+      ORDER BY r.created_at DESC
       `,
       [landlordId]
     );
