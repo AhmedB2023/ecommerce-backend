@@ -245,24 +245,20 @@ app.post('/api/signup', async (req, res) => {
 });
 
 
-// ✅ Landlord reservations (rental system)
+// ✅ Updated Landlord reservations route (no reservation_items)
 app.get('/api/landlord/:landlordId/reservations', async (req, res) => {
   const { landlordId } = req.params;
   try {
     const { rows } = await pool.query(
       `
       SELECT r.id AS id, r.guest_name, r.guest_contact, r.created_at,
-             SUM(ri.monthly_rent * ri.quantity)::numeric(10, 2) AS monthly_rent,
-             JSON_AGG(JSON_BUILD_OBJECT(
-               'property_name', p.name,
-               'monthly_rent', ri.monthly_rent,
-               'quantity', ri.quantity
-             )) AS items
+             r.quantity,
+             r.status,
+             r.monthly_rent,
+             p.name AS property_name
       FROM reservations r
-      JOIN reservation_items ri ON r.id = ri.reservation_id
-      JOIN properties p ON ri.property_id = p.id
+      JOIN properties p ON r.property_id = p.id
       WHERE r.landlord_id = $1
-      GROUP BY r.id, r.guest_name, r.guest_contact, r.created_at
       ORDER BY r.created_at DESC
       `,
       [landlordId]
@@ -273,6 +269,7 @@ app.get('/api/landlord/:landlordId/reservations', async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 
 // ✅ Reserve property (tenant -> landlord)
 app.post('/api/reserve-order', async (req, res) => {
@@ -290,7 +287,6 @@ app.post('/api/reserve-order', async (req, res) => {
     guestContact,
   } = req.body;
 
-  // Normalize fields
   const actualTenantId = tenant_id ?? userId ?? null;
   const actualItems = properties ?? items ?? [];
   const actualGuestName = guest_name ?? guestName ?? null;
@@ -304,10 +300,14 @@ app.post('/api/reserve-order', async (req, res) => {
   }
 
   const barcodeText = crypto.randomBytes(4).toString('hex');
-  const total = actualItems.reduce(
-    (sum, it) => sum + Number(it.monthly_rent ?? 0) * Number(it.quantity ?? 1),
-    0
-  );
+
+  // ✅ Use first property from the array (since we support only 1 now)
+  const property = actualItems[0];
+  const propertyId = property.property_id ?? property.id;
+  const quantity = property.quantity ?? 1;
+  const monthlyRent = property.monthly_rent ?? 0;
+
+  const total = Number(monthlyRent) * Number(quantity);
 
   const client = await pool.connect();
   try {
@@ -321,32 +321,16 @@ app.post('/api/reserve-order', async (req, res) => {
     const landlordEmail = landlordResult.rows[0]?.email;
     const landlordName = landlordResult.rows[0]?.username;
 
-    // ✅ Use first property for main reservation
-    const firstPropertyId = actualItems[0].property_id ?? actualItems[0].id;
-
+    // ✅ Insert directly into reservations
     const { rows } = await client.query(
-      `INSERT INTO reservations (guest_name, guest_contact, landlord_id, product_id, created_at)
-       VALUES ($1, $2, $3, $4, NOW())
+      `INSERT INTO reservations 
+         (guest_name, guest_contact, landlord_id, property_id, quantity, monthly_rent, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, NOW())
        RETURNING id`,
-      [actualGuestName, actualGuestContact, landlord_id, firstPropertyId]
+      [actualGuestName, actualGuestContact, landlord_id, propertyId, quantity, monthlyRent]
     );
 
     const reservationId = rows[0].id;
-
-    // 🏠 Insert reservation items (support multiple)
-    const insertItemSQL = `
-      INSERT INTO reservation_items (reservation_id, property_id, quantity, monthly_rent)
-      VALUES ($1, $2, $3, $4)
-    `;
-    for (const it of actualItems) {
-      const propertyId = it.property_id ?? it.id;
-      await client.query(insertItemSQL, [
-        reservationId,
-        propertyId,
-        it.quantity ?? 1,
-        it.monthly_rent ?? 0,
-      ]);
-    }
 
     await client.query('COMMIT');
 
@@ -378,6 +362,7 @@ app.post('/api/reserve-order', async (req, res) => {
     client.release();
   }
 });
+
 
 app.put('/api/reservations/:id/status', async (req, res) => {
   const { id } = req.params;
