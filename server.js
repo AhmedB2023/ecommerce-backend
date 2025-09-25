@@ -318,12 +318,12 @@ app.post('/api/reserve-order', async (req, res) => {
     const landlordName = landlordResult.rows[0]?.username;
 
     // Insert reservation
-    const { rows } = await client.query(
-      `INSERT INTO reservations (guest_name, guest_contact, landlord_id, monthly_rent, created_at)
-       VALUES ($1, $2, $3, $4, NOW())
-       RETURNING id`,
-      [actualGuestName, actualGuestContact, landlord_id, total]
-    );
+    const { rows } = await pool.query(
+  `INSERT INTO reservations (guest_name, guest_contact, landlord_id, product_id, created_at)
+   VALUES ($1, $2, $3, $4, NOW())`,
+  [guest_name, guest_contact, landlord_id, property_id]
+);
+
     const reservationId = rows[0].id;
 
     // Insert reservation items
