@@ -251,11 +251,16 @@ app.get('/api/landlord/:landlordId/reservations', async (req, res) => {
   try {
     const { rows } = await pool.query(
       `
-      SELECT r.id AS id, r.guest_name, r.guest_contact, r.created_at,
-             r.quantity,
-             r.status,
-             r.monthly_rent,
-             p.name AS property_name
+      SELECT 
+        r.id,
+        r.guest_name,
+        r.guest_contact,
+        r.created_at,
+        r.quantity,
+        r.status,
+        r.reservation_code,
+        p.name AS property_name,
+        p.monthly_rent
       FROM reservations r
       JOIN properties p ON r.property_id = p.id
       WHERE r.landlord_id = $1
@@ -269,6 +274,7 @@ app.get('/api/landlord/:landlordId/reservations', async (req, res) => {
     res.status(500).json({ error: "Internal Server Error" });
   }
 });
+
 
 
 // ✅ Reserve property (tenant -> landlord)
