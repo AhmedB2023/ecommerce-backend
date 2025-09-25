@@ -286,9 +286,10 @@ app.post('/api/reserve-order', async (req, res) => {
     guest_name,
     guestName,
     guest_contact,
-    guestContact
+    guestContact,
   } = req.body;
 
+  // Normalize fields
   const actualTenantId = tenant_id ?? userId ?? null;
   const actualItems = properties ?? items ?? [];
   const actualGuestName = guest_name ?? guestName ?? null;
@@ -297,11 +298,13 @@ app.post('/api/reserve-order', async (req, res) => {
   if (!Array.isArray(actualItems) || actualItems.length === 0) {
     return res.status(400).json({ error: 'Missing properties' });
   }
-  if (!landlord_id) return res.status(400).json({ error: 'Missing landlord_id' });
+  if (!landlord_id) {
+    return res.status(400).json({ error: 'Missing landlord_id' });
+  }
 
   const barcodeText = crypto.randomBytes(4).toString('hex');
   const total = actualItems.reduce(
-    (sum, it) => sum + Number(it.monthly_rent) * Number(it.quantity),
+    (sum, it) => sum + Number(it.monthly_rent ?? 0) * Number(it.quantity ?? 1),
     0
   );
 
@@ -309,7 +312,7 @@ app.post('/api/reserve-order', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // Get landlord info
+    // 🔍 Get landlord info
     const landlordResult = await client.query(
       'SELECT email, username FROM users WHERE id = $1 AND role = $2',
       [landlord_id, 'landlord']
@@ -317,16 +320,19 @@ app.post('/api/reserve-order', async (req, res) => {
     const landlordEmail = landlordResult.rows[0]?.email;
     const landlordName = landlordResult.rows[0]?.username;
 
-    // Insert reservation
-    const { rows } = await pool.query(
-  `INSERT INTO reservations (guest_name, guest_contact, landlord_id, product_id, created_at)
-   VALUES ($1, $2, $3, $4, NOW())`,
-  [guest_name, guest_contact, landlord_id, property_id]
-);
+    // ✅ Use first property for main reservation
+    const firstPropertyId = actualItems[0].property_id ?? actualItems[0].id;
+
+    const { rows } = await client.query(
+      `INSERT INTO reservations (guest_name, guest_contact, landlord_id, product_id, created_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       RETURNING id`,
+      [actualGuestName, actualGuestContact, landlord_id, firstPropertyId]
+    );
 
     const reservationId = rows[0].id;
 
-    // Insert reservation items
+    // 🏠 Insert reservation items (support multiple)
     const insertItemSQL = `
       INSERT INTO reservation_items (reservation_id, property_id, quantity, monthly_rent)
       VALUES ($1, $2, $3, $4)
@@ -336,14 +342,14 @@ app.post('/api/reserve-order', async (req, res) => {
       await client.query(insertItemSQL, [
         reservationId,
         propertyId,
-        it.quantity,
-        it.monthly_rent,
+        it.quantity ?? 1,
+        it.monthly_rent ?? 0,
       ]);
     }
 
     await client.query('COMMIT');
 
-    // 📤 Email landlord
+    // 📧 Notify landlord
     if (landlordEmail) {
       const emailBody = `
         <h2>New Rental Reservation</h2>
@@ -371,6 +377,7 @@ app.post('/api/reserve-order', async (req, res) => {
     client.release();
   }
 });
+
 
 
 // ✅ Get tenant orders
