@@ -377,18 +377,38 @@ app.post('/api/reserve-order', async (req, res) => {
 
 app.put('/api/reservations/:id/status', async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body; // 'accepted' | 'rejected' | 'docs_requested'
+  const { status } = req.body;
 
   const allowed = ['accepted', 'rejected', 'docs_requested'];
   if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status' });
 
   try {
-    const { rows } = await pool.query(
-      `UPDATE reservations SET status = $1 WHERE id = $2 RETURNING id, status`,
+    // 1. Update reservation status
+    const updateResult = await pool.query(
+      `UPDATE reservations SET status = $1 WHERE id = $2 RETURNING id, status, guest_name, guest_email`,
       [status, id]
     );
-    if (!rows.length) return res.status(404).json({ error: 'Reservation not found' });
-    res.json(rows[0]);
+
+    if (!updateResult.rows.length) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+
+    const reservation = updateResult.rows[0];
+
+    // 2. Send email notification
+    if (reservation.guest_email) {
+      const subject = `Reservation Status: ${status.toUpperCase()}`;
+      const text = `Hi ${reservation.guest_name},\n\nYour reservation status has been updated to: ${status.toUpperCase()}.\n\nThank you,\nTajer Team`;
+
+      await sendEmail({
+        to: reservation.guest_email,
+        subject,
+        text,
+      });
+    }
+
+    // 3. Respond with updated data
+    res.json(reservation);
   } catch (e) {
     console.error('update status error:', e.message);
     res.status(500).json({ error: 'Failed to update status' });
