@@ -276,7 +276,6 @@ app.get('/api/landlord/:landlordId/reservations', async (req, res) => {
 });
 
 
-
 // ✅ Reserve property (tenant -> landlord)
 app.post('/api/reserve-order', async (req, res) => {
   console.log('Incoming rental request:', req.body);
@@ -311,13 +310,19 @@ app.post('/api/reserve-order', async (req, res) => {
   const property = actualItems[0];
   const propertyId = property.property_id ?? property.id;
   const quantity = property.quantity ?? 1;
-  const monthlyRent = property.monthly_rent ?? 0;
-
-  const total = Number(monthlyRent) * Number(quantity);
 
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    // 🔍 Get monthly_rent from properties table
+    const rentResult = await client.query(
+      'SELECT monthly_rent FROM properties WHERE id = $1',
+      [propertyId]
+    );
+    const monthlyRent = rentResult.rows[0]?.monthly_rent ?? 0;
+
+    const total = Number(monthlyRent) * Number(quantity);
 
     // 🔍 Get landlord info
     const landlordResult = await client.query(
