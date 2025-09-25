@@ -379,6 +379,25 @@ app.post('/api/reserve-order', async (req, res) => {
   }
 });
 
+app.put('/api/reservations/:id/status', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body; // 'accepted' | 'rejected' | 'docs_requested'
+
+  const allowed = ['accepted', 'rejected', 'docs_requested'];
+  if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+
+  try {
+    const { rows } = await pool.query(
+      `UPDATE reservations SET status = $1 WHERE id = $2 RETURNING id, status`,
+      [status, id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Reservation not found' });
+    res.json(rows[0]);
+  } catch (e) {
+    console.error('update status error:', e.message);
+    res.status(500).json({ error: 'Failed to update status' });
+  }
+});
 
 
 // ✅ Get tenant orders
