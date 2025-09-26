@@ -129,31 +129,8 @@ async function ensureSchema() {
 ensureSchema();
 
 
-// ✅ Get all active properties (cleaned for real estate)
-app.get('/api/properties', async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT 
-        p.id, 
-        p.name, 
-        p.min_price, 
-        p.max_price,
-        p.description, 
-        p.landlord_id,
-        u.username AS landlord_name
-      FROM properties p
-      JOIN users u ON p.landlord_id = u.id
-      WHERE u.role = 'landlord' AND p.is_active = true
-    `);
-    res.json(result.rows);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server error');
-  }
-});
 
 
-// ✅ Add property (landlord only) with multiple images
 app.post('/api/properties', upload.array('images'), async (req, res) => {
   const {
     name,
@@ -163,11 +140,15 @@ app.post('/api/properties', upload.array('images'), async (req, res) => {
     num_bedrooms,
     num_bathrooms,
     landlord_id,
+    street_address,
+    city,
+    state,
+    zipcode,
   } = req.body;
 
   const files = req.files;
 
-  if (!name || !min_price || !max_price || !landlord_id) {
+  if (!name || !min_price || !max_price || !landlord_id || !street_address || !city || !state || !zipcode) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
@@ -185,19 +166,20 @@ app.post('/api/properties', upload.array('images'), async (req, res) => {
       return res.status(403).json({ error: 'Only landlords can add properties' });
     }
 
-    // ✅ Insert property
+    // ✅ Insert property with address fields
     const result = await pool.query(
-      `INSERT INTO properties (name, description, min_price, max_price, num_bedrooms, num_bathrooms, landlord_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO properties 
+       (name, description, min_price, max_price, num_bedrooms, num_bathrooms, landlord_id, street_address, city, state, zipcode)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
-      [name, description, min_price, max_price, num_bedrooms, num_bathrooms, landlord_id]
+      [name, description, min_price, max_price, num_bedrooms, num_bathrooms, landlord_id, street_address, city, state, zipcode]
     );
 
     const property = result.rows[0];
 
-    // ✅ Save images in property_images table (simulate image URLs)
+    // ✅ Save images in property_images table
     for (const file of files) {
-      const fakeUrl = `https://tajernow.com/uploads/${file.originalname}`; // Replace with real URL logic later
+      const fakeUrl = `https://ecommerce-backend-y3v4.onrender.com/uploads/${file.filename}`;
       await pool.query(
         `INSERT INTO property_images (property_id, image_url)
          VALUES ($1, $2)`,
@@ -205,13 +187,14 @@ app.post('/api/properties', upload.array('images'), async (req, res) => {
       );
     }
 
-    res.json({ message: "✅ Property added with images", property });
+    res.json({ message: "✅ Property added with address + images", property });
   } catch (err) {
     console.error('❌ Error inserting property:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
+// ✅ Get all active properties (with landlord, address, and images)
 app.get('/api/properties', async (req, res) => {
   try {
     const result = await pool.query(`
@@ -221,6 +204,12 @@ app.get('/api/properties', async (req, res) => {
         p.min_price, 
         p.max_price,
         p.description, 
+        p.num_bedrooms,
+        p.num_bathrooms,
+        p.street_address,
+        p.city,
+        p.state,
+        p.zipcode,
         p.landlord_id,
         u.username AS landlord_name
       FROM properties p
@@ -253,10 +242,11 @@ app.get('/api/properties', async (req, res) => {
 
     res.json(withImages);
   } catch (err) {
-    console.error("Error in /api/properties:", err.message);
+    console.error("❌ Error in /api/properties:", err.message);
     res.status(500).send('Server error');
   }
 });
+
 // ✅ Get one property by ID (with landlord info)
 app.get('/api/properties/:id', async (req, res) => {
   const { id } = req.params;
