@@ -193,6 +193,51 @@ app.post('/api/properties', upload.array('images'), async (req, res) => {
   }
 });
 
+app.get('/api/properties', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT 
+        p.id, 
+        p.name, 
+        p.min_price, 
+        p.max_price,
+        p.description, 
+        p.landlord_id,
+        u.username AS landlord_name
+      FROM properties p
+      JOIN users u ON p.landlord_id = u.id
+      WHERE u.role = 'landlord' AND p.is_active = true
+    `);
+
+    const properties = result.rows;
+
+    // Fetch all images
+    const imageResults = await pool.query(`
+      SELECT property_id, image_url 
+      FROM property_images
+    `);
+
+    // Group images by property_id
+    const imageMap = {};
+    imageResults.rows.forEach(img => {
+      if (!imageMap[img.property_id]) {
+        imageMap[img.property_id] = [];
+      }
+      imageMap[img.property_id].push(img.image_url);
+    });
+
+    // Attach image arrays to properties
+    const withImages = properties.map(p => ({
+      ...p,
+      images: imageMap[p.id] || []
+    }));
+
+    res.json(withImages);
+  } catch (err) {
+    console.error("Error in /api/properties:", err.message);
+    res.status(500).send('Server error');
+  }
+});
 
 // ✅ Soft delete property
 app.delete('/api/properties/:id', async (req, res) => {
