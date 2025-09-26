@@ -1,4 +1,7 @@
 require('dotenv').config();
+const express = require('express');
+const app = express(); // ✅ MISSING BEFORE
+
 // 📧 Brevo setup
 const SibApiV3Sdk = require('sib-api-v3-sdk');
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
@@ -6,12 +9,28 @@ const apiKey = defaultClient.authentications['api-key'];
 apiKey.apiKey = process.env.BREVO_API_KEY;
 const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 const sendEmail = require('./utils/sendEmail');
+
+// 🧳 File upload setup
 const multer = require('multer');
 const path = require('path');
 
-// Save uploads to local folder or temp (you can replace with S3, etc.)
-const storage = multer.memoryStorage(); // using memory for simplicity
+// ✅ Serve uploaded images statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// ✅ Store images to /uploads folder with unique names
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/');
+  },
+  filename: function (req, file, cb) {
+    const uniqueName = Date.now() + '-' + file.originalname;
+    cb(null, uniqueName);
+  }
+});
+
 const upload = multer({ storage });
+
+
 
 
 console.log("🔍 APP_BASE_URL from .env:", process.env.APP_BASE_URL);
@@ -28,7 +47,7 @@ const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
 const sendResetEmail = require('./utils/sendEmail');
 
-const app = express();
+
 
 app.use(cors({
   origin: function (origin, callback) {
