@@ -305,31 +305,65 @@ app.delete('/api/properties/:id', async (req, res) => {
   }
 });
 
-// ✅ Search properties (real estate version)
 app.get('/api/search', async (req, res) => {
-  const search = (req.query.query || '').trim();
-  if (!search) return res.json([]);
+  const query = req.query.query?.trim();
+
+  if (!query) {
+    return res.status(400).json({ error: 'Missing search query' });
+  }
+
   try {
-    const result = await pool.query(
-      `SELECT 
-         p.id, 
-         p.name, 
-         p.min_price, 
-         p.max_price, 
-         p.description, 
-         p.landlord_id, 
-         u.username AS landlord_name
-       FROM properties p
-       JOIN users u ON p.landlord_id = u.id
-       WHERE p.name ILIKE $1 AND p.is_active = true`,
-      [`%${search}%`]
-    );
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Search error:', error);
-    res.status(500).json({ message: 'Search failed' });
+    const result = await pool.query(`
+      SELECT 
+        p.id, 
+        p.name, 
+        p.min_price, 
+        p.max_price,
+        p.description, 
+        p.num_bedrooms,
+        p.num_bathrooms,
+        p.street_address,
+        p.city,
+        p.state,
+        p.zipcode,
+        p.landlord_id,
+        u.username AS landlord_name
+      FROM properties p
+      JOIN users u ON p.landlord_id = u.id
+      WHERE p.is_active = true AND (
+        LOWER(p.city) LIKE LOWER($1) OR
+        p.zipcode = $2
+      )
+    `, [`%${query}%`, query]);
+
+    const properties = result.rows;
+
+    // Fetch all images
+    const imageResults = await pool.query(`
+      SELECT property_id, image_url 
+      FROM property_images
+    `);
+
+    const imageMap = {};
+    imageResults.rows.forEach(img => {
+      if (!imageMap[img.property_id]) {
+        imageMap[img.property_id] = [];
+      }
+      imageMap[img.property_id].push(img.image_url);
+    });
+
+    const withImages = properties.map(p => ({
+      ...p,
+      images: imageMap[p.id] || []
+    }));
+
+    res.json(withImages);
+  } catch (err) {
+    console.error("❌ Error in /api/search:", err.message);
+    res.status(500).json({ error: "Server error" });
   }
 });
+
 
 // ✅ Get landlord by name
 app.get('/api/landlord/by-name/:landlordName', async (req, res) => {
