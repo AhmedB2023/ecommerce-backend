@@ -6,6 +6,12 @@ const apiKey = defaultClient.authentications['api-key'];
 apiKey.apiKey = process.env.BREVO_API_KEY;
 const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
 const sendEmail = require('./utils/sendEmail');
+const multer = require('multer');
+const path = require('path');
+
+// Save uploads to local folder or temp (you can replace with S3, etc.)
+const storage = multer.memoryStorage(); // using memory for simplicity
+const upload = multer({ storage });
 
 
 console.log("🔍 APP_BASE_URL from .env:", process.env.APP_BASE_URL);
@@ -106,9 +112,24 @@ app.get('/api/properties', async (req, res) => {
   }
 });
 
-// ✅ Add property (landlord only)
-app.post('/api/properties', async (req, res) => {
-  const { name, description, monthly_rent , landlord_id } = req.body;
+// ✅ Add property (landlord only) with multiple images
+app.post('/api/properties', upload.array('images'), async (req, res) => {
+  const {
+    name,
+    description,
+    min_price,
+    max_price,
+    num_bedrooms,
+    num_bathrooms,
+    landlord_id,
+  } = req.body;
+
+  const files = req.files;
+
+  if (!name || !min_price || !max_price || !landlord_id) {
+    return res.status(400).json({ error: 'Missing required fields' });
+  }
+
   try {
     const roleCheck = await pool.query(
       'SELECT username, role FROM users WHERE id = $1',
@@ -118,23 +139,38 @@ app.post('/api/properties', async (req, res) => {
     if (roleCheck.rows.length === 0) {
       return res.status(404).json({ error: 'User not found' });
     }
+
     if (roleCheck.rows[0].role !== 'landlord') {
       return res.status(403).json({ error: 'Only landlords can add properties' });
     }
 
+    // ✅ Insert property
     const result = await pool.query(
-      `INSERT INTO properties (name, description, monthly_rent , landlord_id)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO properties (name, description, min_price, max_price, num_bedrooms, num_bathrooms, landlord_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
-      [name, description, monthly_rent , landlord_id]
+      [name, description, min_price, max_price, num_bedrooms, num_bathrooms, landlord_id]
     );
 
-    res.json({ message: "✅ Property added successfully", property: result.rows[0] });
+    const property = result.rows[0];
+
+    // ✅ Save images in property_images table (simulate image URLs)
+    for (const file of files) {
+      const fakeUrl = `https://tajernow.com/uploads/${file.originalname}`; // Replace with real URL logic later
+      await pool.query(
+        `INSERT INTO property_images (property_id, image_url)
+         VALUES ($1, $2)`,
+        [property.id, fakeUrl]
+      );
+    }
+
+    res.json({ message: "✅ Property added with images", property });
   } catch (err) {
-    console.error('Error inserting property:', err.message);
+    console.error('❌ Error inserting property:', err.message);
     res.status(500).json({ error: 'Server error' });
   }
 });
+
 
 // ✅ Soft delete property
 app.delete('/api/properties/:id', async (req, res) => {
@@ -247,12 +283,22 @@ app.post('/api/signup', async (req, res) => {
 });
 
 
-// ✅ Updated Landlord reservations route (no reservation_items)
+// ✅ Get all reservations for a landlord (with auto-expire after 72 hours)
 app.get('/api/landlord/:landlordId/reservations', async (req, res) => {
   const { landlordId } = req.params;
+
   try {
-    const { rows } = await pool.query(
-      `
+    // ✅ Auto-expire reservations older than 72 hours
+    await pool.query(`
+      UPDATE reservations
+      SET status = 'expired'
+      WHERE status = 'pending'
+        AND landlord_id = $1
+        AND created_at < NOW() - INTERVAL '72 hours'
+    `, [landlordId]);
+
+    // ✅ Fetch updated list
+    const { rows } = await pool.query(`
       SELECT 
         r.id,
         r.guest_name,
@@ -260,16 +306,14 @@ app.get('/api/landlord/:landlordId/reservations', async (req, res) => {
         r.created_at,
         r.quantity,
         r.status,
-        r.reservation_code,
-        p.name AS property_name,
-        p.monthly_rent
+        r.offer_amount,
+        p.name AS property_name
       FROM reservations r
       JOIN properties p ON r.property_id = p.id
       WHERE r.landlord_id = $1
       ORDER BY r.created_at DESC
-      `,
-      [landlordId]
-    );
+    `, [landlordId]);
+
     res.json(rows);
   } catch (err) {
     console.error("❌ Error fetching landlord reservations:", err.message);
