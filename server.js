@@ -5,6 +5,8 @@ const defaultClient = SibApiV3Sdk.ApiClient.instance;
 const apiKey = defaultClient.authentications['api-key'];
 apiKey.apiKey = process.env.BREVO_API_KEY;
 const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+const sendEmail = require('./utils/sendEmail');
+
 
 console.log("🔍 APP_BASE_URL from .env:", process.env.APP_BASE_URL);
 
