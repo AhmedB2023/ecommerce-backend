@@ -46,7 +46,7 @@ app.use(cors({
 app.options('*', cors());
 app.use(express.json());
 
-// ✅ Ensure DB schema
+// ✅ Clean Real Estate Reservation Schema
 async function ensureSchema() {
   const sql = `
     CREATE TABLE IF NOT EXISTS users (
@@ -54,7 +54,7 @@ async function ensureSchema() {
       username VARCHAR(50) NOT NULL,
       email VARCHAR(100) NOT NULL UNIQUE,
       password TEXT NOT NULL,
-      role VARCHAR(20) DEFAULT 'tenant',
+      role VARCHAR(20) DEFAULT 'tenant',  -- roles: 'tenant' or 'landlord'
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -62,45 +62,66 @@ async function ensureSchema() {
       id SERIAL PRIMARY KEY,
       name VARCHAR(100) NOT NULL,
       description TEXT,
-      monthly_rent  NUMERIC(10,2),
+      min_price NUMERIC(10,2),               -- Minimum expected rent
+      max_price NUMERIC(10,2),               -- Maximum expected rent
+      num_bedrooms INTEGER,
+      num_bathrooms INTEGER,
       landlord_id INTEGER REFERENCES users(id),
       is_active BOOLEAN DEFAULT true,
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
-    CREATE TABLE IF NOT EXISTS orders (
-      id UUID PRIMARY KEY,
-      tenant_id INTEGER,
+    CREATE TABLE IF NOT EXISTS property_images (
+      id SERIAL PRIMARY KEY,
+      property_id INTEGER REFERENCES properties(id) ON DELETE CASCADE,
+      image_url TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS reservations (
+      id SERIAL PRIMARY KEY,
+      property_id INTEGER REFERENCES properties(id) ON DELETE CASCADE,
+      guest_name VARCHAR(100),
+      guest_contact VARCHAR(150),
+      offer_amount NUMERIC(10,2),            -- Tenant's proposed rent
+      reservation_code VARCHAR(50) UNIQUE,
       landlord_id INTEGER REFERENCES users(id),
-      barcode TEXT,
-      guest_name TEXT,
-      guest_contact TEXT,
-      monthly_rent  NUMERIC(10,2),
-      status VARCHAR(20) DEFAULT 'pending',
+      status VARCHAR(20) DEFAULT 'pending',  -- pending, accepted, rejected
       created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     );
 
-    CREATE TABLE IF NOT EXISTS order_items (
+    CREATE TABLE IF NOT EXISTS favorites (
       id SERIAL PRIMARY KEY,
-      order_id UUID REFERENCES orders(id),
+      user_id INTEGER REFERENCES users(id),
       property_id INTEGER REFERENCES properties(id),
-      quantity INTEGER,
-      monthly_rent  NUMERIC(10,2)
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL,
+      token TEXT NOT NULL,
+      expires_at TIMESTAMP NOT NULL
     );
   `;
+
   await pool.query(sql);
 }
+
 ensureSchema();
 
-// ✅ Test route
-app.get('/test', (req, res) => res.send('✅ Test route is working!'));
 
-// ✅ Get all active properties
+// ✅ Get all active properties (cleaned for real estate)
 app.get('/api/properties', async (req, res) => {
   try {
     const result = await pool.query(`
-      SELECT p.id, p.name, p.monthly_rent, p.description, p.landlord_id,
-             u.username AS landlord_name
+      SELECT 
+        p.id, 
+        p.name, 
+        p.min_price, 
+        p.max_price,
+        p.description, 
+        p.landlord_id,
+        u.username AS landlord_name
       FROM properties p
       JOIN users u ON p.landlord_id = u.id
       WHERE u.role = 'landlord' AND p.is_active = true
@@ -111,6 +132,7 @@ app.get('/api/properties', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
+
 
 // ✅ Add property (landlord only) with multiple images
 app.post('/api/properties', upload.array('images'), async (req, res) => {
@@ -190,13 +212,20 @@ app.delete('/api/properties/:id', async (req, res) => {
   }
 });
 
-// ✅ Search properties
+// ✅ Search properties (real estate version)
 app.get('/api/search', async (req, res) => {
   const search = (req.query.query || '').trim();
   if (!search) return res.json([]);
   try {
     const result = await pool.query(
-      `SELECT p.id, p.name, p.monthly_rent , p.description, p.landlord_id, u.username AS landlord_name
+      `SELECT 
+         p.id, 
+         p.name, 
+         p.min_price, 
+         p.max_price, 
+         p.description, 
+         p.landlord_id, 
+         u.username AS landlord_name
        FROM properties p
        JOIN users u ON p.landlord_id = u.id
        WHERE p.name ILIKE $1 AND p.is_active = true`,
@@ -336,12 +365,14 @@ app.post('/api/reserve-order', async (req, res) => {
     guestName,
     guest_contact,
     guestContact,
+    offer_amount, // 👈 Make sure this comes from the frontend
   } = req.body;
 
   const actualTenantId = tenant_id ?? userId ?? null;
   const actualItems = properties ?? items ?? [];
   const actualGuestName = guest_name ?? guestName ?? null;
   const actualGuestContact = guest_contact ?? guestContact ?? null;
+  const actualOfferAmount = offer_amount ?? 0;
 
   if (!Array.isArray(actualItems) || actualItems.length === 0) {
     return res.status(400).json({ error: 'Missing properties' });
@@ -361,15 +392,6 @@ app.post('/api/reserve-order', async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // 🔍 Get monthly_rent from properties table
-    const rentResult = await client.query(
-      'SELECT monthly_rent FROM properties WHERE id = $1',
-      [propertyId]
-    );
-    const monthlyRent = rentResult.rows[0]?.monthly_rent ?? 0;
-
-    const total = Number(monthlyRent) * Number(quantity);
-
     // 🔍 Get landlord info
     const landlordResult = await client.query(
       'SELECT email, username FROM users WHERE id = $1 AND role = $2',
@@ -378,13 +400,13 @@ app.post('/api/reserve-order', async (req, res) => {
     const landlordEmail = landlordResult.rows[0]?.email;
     const landlordName = landlordResult.rows[0]?.username;
 
-    // ✅ Insert directly into reservations
+    // ✅ Insert directly into reservations with offer_amount
     const { rows } = await client.query(
       `INSERT INTO reservations 
-         (guest_name, guest_contact, landlord_id, property_id, quantity, monthly_rent, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6, NOW())
+         (guest_name, guest_contact, landlord_id, property_id, quantity, offer_amount, reservation_code, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
        RETURNING id`,
-      [actualGuestName, actualGuestContact, landlord_id, propertyId, quantity, monthlyRent]
+      [actualGuestName, actualGuestContact, landlord_id, propertyId, quantity, actualOfferAmount, barcodeText]
     );
 
     const reservationId = rows[0].id;
@@ -400,7 +422,7 @@ app.post('/api/reserve-order', async (req, res) => {
         <p><strong>Contact:</strong> ${actualGuestContact}</p>
         <p><strong>Reservation ID:</strong> ${reservationId}</p>
         <p><strong>Barcode:</strong> ${barcodeText}</p>
-        <p><strong>Total:</strong> $${total.toFixed(2)}</p>
+        <p><strong>Offer Amount:</strong> $${Number(actualOfferAmount).toFixed(2)}</p>
       `;
       await tranEmailApi.sendTransacEmail({
         sender: { name: "Tajer Rentals", email: "support@tajernow.com" },
