@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const app = express(); // ✅ MISSING BEFORE
+const Stripe = require('stripe');
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 // 📧 Brevo setup
 const SibApiV3Sdk = require('sib-api-v3-sdk');
@@ -271,6 +273,28 @@ app.get('/api/properties/:id', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
+
+
+// ✅ Create Payment Intent
+app.post('/api/create-payment-intent', async (req, res) => {
+  const { amount, currency } = req.body;
+
+  try {
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount,          // in cents (e.g., $10 = 1000)
+      currency,        // "usd"
+      automatic_payment_methods: { enabled: true },
+    });
+
+    res.send({
+      clientSecret: paymentIntent.client_secret,
+    });
+  } catch (err) {
+    console.error("❌ Payment error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ✅ Get all images for a property
 app.get('/api/properties/:id/images', async (req, res) => {
   const { id } = req.params;
@@ -285,7 +309,41 @@ app.get('/api/properties/:id/images', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
+// ✅ Create Checkout Session
+app.post("/api/create-checkout-session", async (req, res) => {
+  try {
+    const { propertyId, amount, tenantEmail } = req.body;
 
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: "Invalid payment amount" });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      customer_email: tenantEmail,
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: `Reservation Payment for Property #${propertyId}`,
+            },
+            unit_amount: Math.round(amount * 100), // cents
+          },
+          quantity: 1,
+        },
+      ],
+      mode: "payment",
+      success_url: `${process.env.APP_BASE_URL}/payment-success`,
+      cancel_url: `${process.env.APP_BASE_URL}/payment-cancel`,
+    });
+
+    res.json({ id: session.id, url: session.url });
+  } catch (error) {
+    console.error("❌ Stripe error:", error.message);
+    res.status(500).json({ error: "Payment session failed" });
+  }
+});
 
 // ✅ Soft delete property
 app.delete('/api/properties/:id', async (req, res) => {
