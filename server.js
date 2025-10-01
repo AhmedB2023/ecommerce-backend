@@ -692,11 +692,12 @@ app.put('/api/reservations/:id/status', async (req, res) => {
       console.log("📤 Sending to:", reservation.guest_contact);
 
       try {
-        await sendEmail({
-          to: reservation.guest_contact,
-          subject,
-          text,
-        });
+       await sendEmail({
+            to: [reservation.guest_contact], // 👈 wrapped in array
+               subject,
+                text,
+                       });
+
       } catch (err) {
         console.error('Email sending failed:', err.message);
       }
