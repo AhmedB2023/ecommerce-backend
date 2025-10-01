@@ -692,11 +692,13 @@ app.put('/api/reservations/:id/status', async (req, res) => {
       console.log("📤 Sending to:", reservation.guest_contact);
 
       try {
-      await sendEmail({
-  to: [{ email: reservation.guest_contact }],  // ✅ Correct format
+await tranEmailApi.sendTransacEmail({
+  sender: { name: "Tajer Rentals", email: "support@tajernow.com" },
+  to: [{ email: reservation.guest_contact }], // ✅ Use same pattern
   subject,
-  text,
+  textContent: text,
 });
+
 
 
       } catch (err) {
