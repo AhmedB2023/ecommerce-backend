@@ -650,6 +650,25 @@ if (actualGuestContact && actualGuestContact.includes('@')) {
   }
 });
 
+// ✅ Get reservation by ID (for guest checkout)
+app.get('/api/reservations/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `SELECT * FROM reservations WHERE id = $1`,
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({ message: "Reservation not found" });
+    }
+
+    res.json(rows[0]);
+  } catch (err) {
+    console.error("Error fetching reservation:", err.message);
+    res.status(500).json({ error: "Failed to fetch reservation" });
+  }
+});
 
 // Update reservation status + notify guest (email)
 app.put('/api/reservations/:id/status', async (req, res) => {
