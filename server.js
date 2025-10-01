@@ -597,6 +597,25 @@ app.post('/api/reserve-order', async (req, res) => {
     );
 
     const reservationId = rows[0].id;
+    // 📧 Send email confirmation to guest
+if (actualGuestContact && actualGuestContact.includes('@')) {
+  try {
+    const subject = "Reservation Submitted – Pending Landlord Approval";
+    const text = `Hi ${actualGuestName || 'there'},\n\nThank you for submitting your reservation request.\n\n` +
+                 `Your offer of $${Number(actualOfferAmount).toFixed(2)} has been sent to the landlord.\n\n` +
+                 `You will receive another email once the landlord accepts your offer and approves checkout.\n\n` +
+                 `Reservation ID: ${reservationId}\n\nThank you,\nTajer Rentals`;
+
+    await sendEmail({
+      to: actualGuestContact,
+      subject,
+      text,
+    });
+  } catch (emailErr) {
+    console.error("❌ Failed to send reservation confirmation email:", emailErr.message);
+  }
+}
+
 
     await client.query('COMMIT');
 
