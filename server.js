@@ -691,12 +691,12 @@ app.put('/api/reservations/:id/status', async (req, res) => {
       text += `\n\nThank you,\nTajer Team`;
       console.log("📤 Sending to:", reservation.guest_contact);
 
-      try {
-       await sendEmail({
-            to: [reservation.guest_contact], // 👈 wrapped in array
-               subject,
-                text,
-                       });
+     await sendEmail({
+             to: [{ email: reservation.guest_contact }],  // ✅ Correct format
+              subject,
+             text,
+                    });
+
 
       } catch (err) {
         console.error('Email sending failed:', err.message);
