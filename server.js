@@ -606,15 +606,17 @@ if (actualGuestContact && actualGuestContact.includes('@')) {
                  `You will receive another email once the landlord accepts your offer and approves checkout.\n\n` +
                  `Reservation ID: ${reservationId}\n\nThank you,\nTajer Rentals`;
 
-    await sendEmail({
-      to: actualGuestContact,
+    await tranEmailApi.sendTransacEmail({
+      sender: { name: "Tajer Rentals", email: "support@tajernow.com" },
+      to: [{ email: actualGuestContact }], // ✅ FIXED here
       subject,
-      text,
+      textContent: text, // ✅ textContent for plain emails (vs. htmlContent)
     });
   } catch (emailErr) {
     console.error("❌ Failed to send reservation confirmation email:", emailErr.message);
   }
 }
+
 
 
     await client.query('COMMIT');
