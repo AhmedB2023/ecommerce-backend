@@ -630,6 +630,7 @@ app.post('/api/reserve-order', async (req, res) => {
 });
 
 
+// Update reservation status + notify guest (email)
 app.put('/api/reservations/:id/status', async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
@@ -637,8 +638,9 @@ app.put('/api/reservations/:id/status', async (req, res) => {
   const allowed = ['accepted', 'rejected', 'docs_requested'];
   if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status' });
 
+  const FRONTEND_URL = process.env.FRONTEND_URL || 'https://tajernow.com';
+
   try {
-    // ✅ Use guest_contact instead of guest_email
     const { rows } = await pool.query(
       `UPDATE reservations 
        SET status = $1 
@@ -651,10 +653,21 @@ app.put('/api/reservations/:id/status', async (req, res) => {
 
     const reservation = rows[0];
 
-    // ✅ Send email if guest_contact looks like an email
+    // Send email if guest_contact looks like an email
     if (reservation.guest_contact && reservation.guest_contact.includes('@')) {
-      const subject = `Reservation Status: ${status.toUpperCase()}`;
-      const text = `Hi ${reservation.guest_name},\n\nYour reservation status has been updated to: ${status.toUpperCase()}.\n\nThank you,\nTajer Team`;
+      let subject = `Reservation Status: ${status.toUpperCase()}`;
+      let text = `Hi ${reservation.guest_name || 'there'},\n\nYour reservation status is now: ${status.toUpperCase()}.`;
+
+      if (status === 'accepted') {
+        // ✅ Direct link to guest checkout page
+        text += `\n\n✅ Complete your reservation and (if required) upload your ID here:\n${FRONTEND_URL}/checkout/${reservation.id}\n\nThis secure link will take you to payment.`;
+      } else if (status === 'rejected') {
+        text += `\n\n❌ Unfortunately, your reservation was not accepted this time.`;
+      } else if (status === 'docs_requested') {
+        text += `\n\n📑 Additional documents are required. Please use this link to upload them:\n${FRONTEND_URL}/checkout/${reservation.id}`;
+      }
+
+      text += `\n\nThank you,\nTajer Team`;
 
       try {
         await sendEmail({
@@ -663,7 +676,7 @@ app.put('/api/reservations/:id/status', async (req, res) => {
           text,
         });
       } catch (err) {
-        console.error("Email sending failed:", err.message);
+        console.error('Email sending failed:', err.message);
       }
     }
 
@@ -673,6 +686,7 @@ app.put('/api/reservations/:id/status', async (req, res) => {
     res.status(500).json({ error: 'Failed to update status' });
   }
 });
+
 
 
 
