@@ -688,7 +688,7 @@ app.put('/api/reservations/:id/status', async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
-  const allowed = ['accepted', 'rejected', 'docs_requested'];
+  const allowed = ['accepted', 'rejected','accepted_pending_verification', 'docs_requested'];
   if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status' });
 
   const FRONTEND_URL = process.env.FRONTEND_URL || 'https://tajernow.com';
@@ -711,7 +711,7 @@ app.put('/api/reservations/:id/status', async (req, res) => {
       let subject = `Reservation Status: ${status.toUpperCase()}`;
       let text = `Hi ${reservation.guest_name || 'there'},\n\nYour reservation status is now: ${status.toUpperCase()}.`;
 
-      if (status === 'accepted') {
+      if (status === 'accepted_pending_verification') {
         // ✅ Direct link to guest checkout page
         text += `\n\n✅ Complete your reservation and (if required) upload your ID here:\n${FRONTEND_URL}/checkout/${reservation.id}\n\nThis secure link will take you to payment.`;
       } else if (status === 'rejected') {
