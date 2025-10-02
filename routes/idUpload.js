@@ -34,20 +34,36 @@ const idUpload = upload.fields([
   { name: 'selfie', maxCount: 1 },
 ]);
 
-router.post('/upload-id', idUpload, (req, res) => {
+router.post('/upload-id', idUpload, async (req, res) => {
   const { reservationId } = req.body;
+
   if (!reservationId || !req.files.frontId) {
     return res.status(400).json({ error: 'Missing reservationId or frontId' });
   }
 
-  return res.json({
-    ok: true,
-    reservationId,
-    frontId: req.files.frontId[0].filename,
-    backId: req.files.backId?.[0]?.filename || null,
-    selfie: req.files.selfie?.[0]?.filename || null,
-  });
+  const frontFilename = req.files.frontId[0].filename;
+  const backFilename = req.files.backId?.[0]?.filename || null;
+  const selfieFilename = req.files.selfie?.[0]?.filename || null;
+
+  try {
+    await db.query(
+      'UPDATE reservations SET id_front_url = $1 WHERE id = $2',
+      [frontFilename, reservationId]
+    );
+
+    return res.json({
+      ok: true,
+      reservationId,
+      frontId: frontFilename,
+      backId: backFilename,
+      selfie: selfieFilename,
+    });
+  } catch (err) {
+    console.error('❌ Error saving ID URL to DB:', err);
+    return res.status(500).json({ error: 'Failed to update reservation with ID URL' });
+  }
 });
+
 
 const db = require('../db'); // add this at the top if not already
 
