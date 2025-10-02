@@ -1,6 +1,23 @@
 require('dotenv').config();
 const express = require('express');
 const app = express(); // ✅ MISSING BEFORE
+const cors = require('cors');
+const allowedOrigins = ['https://tajernow.com', 'http://localhost:3000'];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS not allowed"));
+    }
+  },
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
+  allowedHeaders: "Content-Type,Authorization",
+  credentials: true,
+}));
+
+app.options('*', cors());
 const Stripe = require('stripe');
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -45,7 +62,7 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 
-const cors = require('cors');
+
 const pool = require('./db');
 const bcrypt = require('bcryptjs');
 const { v4: uuidv4 } = require('uuid');
@@ -54,22 +71,7 @@ const sendResetEmail = require('./utils/sendEmail');
 
 
 
-const allowedOrigins = ['https://tajernow.com', 'http://localhost:3000'];
 
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("CORS not allowed"));
-    }
-  },
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
-  allowedHeaders: "Content-Type,Authorization",
-  credentials: true,
-}));
-
-app.options('*', cors());
 app.use(express.json());
 
 // ✅ Clean Real Estate Reservation Schema
