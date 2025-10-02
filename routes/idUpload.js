@@ -49,4 +49,37 @@ router.post('/upload-id', idUpload, (req, res) => {
   });
 });
 
+const db = require('../db'); // add this at the top if not already
+
+router.post('/verify-id', async (req, res) => {
+  const { reservationId } = req.body;
+
+  if (!reservationId) {
+    return res.status(400).json({ error: 'Missing reservationId' });
+  }
+
+  try {
+    const result = await db.query(
+      'UPDATE reservations SET id_verified = true WHERE id = $1 RETURNING *',
+      [reservationId]
+    );
+    res.json({ ok: true, updated: result.rows[0] });
+  } catch (err) {
+    console.error('❌ Error verifying ID:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+router.get('/unverified-ids', async (req, res) => {
+  try {
+    const result = await db.query(
+      'SELECT id, guest_name, guest_contact, id_front_url FROM reservations WHERE id_front_url IS NOT NULL AND id_verified = false ORDER BY created_at DESC'
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error('❌ Error fetching unverified IDs:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+
 module.exports = router;
