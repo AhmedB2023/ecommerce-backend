@@ -2,8 +2,13 @@ const express = require('express');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
+const db = require('../db'); // ✅ DB import moved up
 
 const router = express.Router();
+console.log("🚀 idUpload.js loaded on server");  // ✅ put it here
+
+// ✅ Parse JSON body for POST requests like /verify-id
+router.use(express.json());
 
 // Make sure /uploads/ids exists
 const ID_DIR = path.join(__dirname, '..', 'uploads', 'ids');
@@ -12,7 +17,7 @@ fs.mkdirSync(ID_DIR, { recursive: true });
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, ID_DIR),
   filename: (req, file, cb) => {
-    const reservationId = (req.body.reservationId || 'unknown').toString();
+    const reservationId = (req.body?.reservationId || 'unknown').toString();
     const ext = path.extname(file.originalname) || '.jpg';
     cb(null, `${reservationId}_${Date.now()}${ext}`);
   }
@@ -34,10 +39,11 @@ const idUpload = upload.fields([
   { name: 'selfie', maxCount: 1 },
 ]);
 
+// ✅ Upload ID route (file upload)
 router.post('/upload-id', idUpload, async (req, res) => {
-  const { reservationId } = req.body;
+  const { reservationId } = req.body || {}; 
 
-  if (!reservationId || !req.files.frontId) {
+  if (!reservationId || !req.files?.frontId) {
     return res.status(400).json({ error: 'Missing reservationId or frontId' });
   }
 
@@ -64,12 +70,11 @@ router.post('/upload-id', idUpload, async (req, res) => {
   }
 });
 
-
-const db = require('../db'); // add this at the top if not already
-
+// ✅ Verify ID route (plain JSON)
 router.post('/verify-id', async (req, res) => {
-    console.log('✅ /verify-id hit with body:', req.body);
-  const { reservationId } = req.body;
+  console.log('✅ /verify-id hit with body:', req.body);
+
+  const { reservationId } = req.body || {};
 
   if (!reservationId) {
     return res.status(400).json({ error: 'Missing reservationId' });
@@ -80,16 +85,26 @@ router.post('/verify-id', async (req, res) => {
       'UPDATE reservations SET id_verified = true WHERE id = $1 RETURNING *',
       [reservationId]
     );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ ok: false, error: 'Reservation not found' });
+    }
+
     res.json({ ok: true, updated: result.rows[0] });
   } catch (err) {
     console.error('❌ Error verifying ID:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+// ✅ Fetch unverified IDs
 router.get('/unverified-ids', async (req, res) => {
   try {
     const result = await db.query(
-      'SELECT id, guest_name, guest_contact, id_front_url FROM reservations WHERE id_front_url IS NOT NULL AND id_verified = false ORDER BY created_at DESC'
+      `SELECT id, guest_name, guest_contact, id_front_url 
+       FROM reservations 
+       WHERE id_front_url IS NOT NULL AND id_verified = false 
+       ORDER BY created_at DESC`
     );
     res.json(result.rows);
   } catch (err) {
@@ -97,6 +112,5 @@ router.get('/unverified-ids', async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
-
 
 module.exports = router;
