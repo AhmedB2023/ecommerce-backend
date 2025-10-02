@@ -535,6 +535,7 @@ app.get('/api/landlord/:landlordId/reservations', async (req, res) => {
         r.quantity,
         r.status,
         r.offer_amount,
+        r.id_verified,
         p.name AS property_name
       FROM reservations r
       JOIN properties p ON r.property_id = p.id
