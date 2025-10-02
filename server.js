@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const app = express(); // ✅ MISSING BEFORE
+app.use(express.json());
 const cors = require('cors');
 const allowedOrigins = ['https://tajernow.com', 'http://localhost:3000'];
 
@@ -78,7 +79,7 @@ const sendResetEmail = require('./utils/sendEmail');
 
 
 
-app.use(express.json());
+
 
 // ✅ Clean Real Estate Reservation Schema
 async function ensureSchema() {
