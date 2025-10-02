@@ -68,6 +68,7 @@ router.post('/upload-id', idUpload, async (req, res) => {
 const db = require('../db'); // add this at the top if not already
 
 router.post('/verify-id', async (req, res) => {
+    console.log('✅ /verify-id hit with body:', req.body);
   const { reservationId } = req.body;
 
   if (!reservationId) {
