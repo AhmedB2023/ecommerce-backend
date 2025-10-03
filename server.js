@@ -1,6 +1,14 @@
 require('dotenv').config();
 const express = require('express');
 const app = express(); // ✅ MISSING BEFORE
+// Stripe raw body middleware
+const bodyParser = require("body-parser");
+
+// Stripe requires the raw body to validate webhook signatures
+app.post("/webhook", bodyParser.raw({ type: "application/json" }));
+
+
+
 app.use(express.json());
 const cors = require('cors');
 const allowedOrigins = ['https://tajernow.com', 'http://localhost:3000'];
@@ -326,31 +334,36 @@ app.get('/api/properties/:id/images', async (req, res) => {
 // ✅ Create Checkout Session
 app.post("/api/create-checkout-session", async (req, res) => {
   try {
-    const { propertyId, amount, tenantEmail } = req.body;
+    const { propertyId, amount, tenantEmail, reservationId } = req.body;
+
 
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: "Invalid payment amount" });
     }
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      customer_email: tenantEmail,
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: `Reservation Payment for Property #${propertyId}`,
-            },
-            unit_amount: Math.round(amount * 100), // cents
-          },
-          quantity: 1,
+  payment_method_types: ["card"],
+  customer_email: tenantEmail,
+  metadata: {
+    reservationId: reservationId.toString()
+  },
+  line_items: [
+    {
+      price_data: {
+        currency: "usd",
+        product_data: {
+          name: `Reservation Payment for Property #${propertyId}`,
         },
-      ],
-      mode: "payment",
-      success_url: `${process.env.APP_BASE_URL}/payment-success`,
-      cancel_url: `${process.env.APP_BASE_URL}/payment-cancel`,
-    });
+        unit_amount: Math.round(amount * 100),
+      },
+      quantity: 1,
+    },
+  ],
+  mode: "payment",
+  success_url: `${process.env.APP_BASE_URL}/payment-success`,
+  cancel_url: `${process.env.APP_BASE_URL}/payment-cancel`,
+});
+
 
     res.json({ id: session.id, url: session.url });
   } catch (error) {
@@ -376,6 +389,93 @@ app.delete('/api/properties/:id', async (req, res) => {
     res.status(500).json({ message: 'Server error' });
   }
 });
+
+
+
+app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
+  const sig = req.headers["stripe-signature"];
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err) {
+    console.error("❌ Webhook signature verification failed:", err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // ✅ Handle successful checkout session
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+    const reservationId = session.metadata?.reservationId;
+
+    if (!reservationId) {
+      console.error("⚠️ No reservationId in metadata");
+      return res.status(400).send("Missing reservationId");
+    }
+
+    try {
+      // 1. Update reservation status to 'accepted'
+      const result = await db.query(
+        "UPDATE reservations SET status = 'accepted' WHERE id = $1 RETURNING *",
+        [reservationId]
+      );
+      const reservation = result.rows[0];
+
+      if (!reservation) {
+        console.warn("⚠️ Reservation not found:", reservationId);
+        return res.status(404).send("Reservation not found");
+      }
+
+      // 2. Get landlord email
+      const landlordResult = await db.query(
+        "SELECT email FROM users WHERE id = $1",
+        [reservation.landlord_id]
+      );
+      const landlordEmail = landlordResult.rows[0]?.email;
+
+      // 3. Guest email comes from guest_contact (if it's an email format)
+      const tenantEmail = reservation.guest_contact;
+
+      // 4. Send confirmation emails (Brevo integration)
+      const sender = { name: "Tajer", email: "support@tajernow.com" };
+
+      const emailPromises = [];
+
+      if (tenantEmail?.includes("@")) {
+        emailPromises.push(
+          tranEmailApi.sendTransacEmail({
+            sender,
+            to: [{ email: tenantEmail }],
+            subject: "Your Reservation is Confirmed!",
+            htmlContent: `<p>Thank you for your payment. Your reservation for property #${reservation.property_id} has been confirmed.</p>`
+          })
+        );
+      }
+
+      if (landlordEmail) {
+        emailPromises.push(
+          tranEmailApi.sendTransacEmail({
+            sender,
+            to: [{ email: landlordEmail }],
+            subject: "New Reservation Confirmed",
+            htmlContent: `<p>A new reservation has been accepted for your property #${reservation.property_id}. Please check your dashboard for details.</p>`
+          })
+        );
+      }
+
+      await Promise.all(emailPromises);
+      console.log("✅ Emails sent to tenant and landlord.");
+    } catch (err) {
+      console.error("❌ Error processing webhook:", err.message);
+      return res.status(500).send("Webhook processing error");
+    }
+  }
+
+  res.status(200).json({ received: true });
+});
+
 
 app.get('/api/search', async (req, res) => {
   const query = req.query.query?.trim();
