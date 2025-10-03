@@ -688,8 +688,16 @@ app.put('/api/reservations/:id/status', async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
-  const allowed = ['accepted', 'rejected','accepted_pending_verification', 'docs_requested'];
-  if (!allowed.includes(status)) return res.status(400).json({ error: 'Invalid status' });
+  const allowed = [
+    'accepted',
+    'accepted_pending_verification',
+    'rejected',
+    'docs_requested'
+  ];
+
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ error: 'Invalid status' });
+  }
 
   const FRONTEND_URL = process.env.FRONTEND_URL || 'https://tajernow.com';
 
@@ -698,43 +706,100 @@ app.put('/api/reservations/:id/status', async (req, res) => {
       `UPDATE reservations 
        SET status = $1 
        WHERE id = $2 
-       RETURNING id, status, guest_name, guest_contact`,
+       RETURNING id, status, guest_name, guest_contact, landlord_id`,
       [status, id]
     );
 
-    if (!rows.length) return res.status(404).json({ error: 'Reservation not found' });
+    if (!rows.length) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
 
     const reservation = rows[0];
 
-    // Send email if guest_contact looks like an email
+    // Only send emails if guest_contact looks like an email
     if (reservation.guest_contact && reservation.guest_contact.includes('@')) {
-      let subject = `Reservation Status: ${status.toUpperCase()}`;
-      let text = `Hi ${reservation.guest_name || 'there'},\n\nYour reservation status is now: ${status.toUpperCase()}.`;
+      let subject;
+      let text;
 
       if (status === 'accepted_pending_verification') {
-        // ✅ Direct link to guest checkout page
-        text += `\n\n✅ Complete your reservation and (if required) upload your ID here:\n${FRONTEND_URL}/checkout/${reservation.id}\n\nThis secure link will take you to payment.`;
+        subject = 'Reservation accepted – pending ID verification';
+        text = `Hi ${reservation.guest_name || 'there'},
+
+Your reservation has been accepted by the landlord, but before it can be finalized, we need to verify your ID.
+
+Please upload your ID using the secure link below:
+${FRONTEND_URL}/checkout/${reservation.id}
+
+Once your ID is verified, we’ll notify you and the landlord.
+
+Thank you,
+Tajer Team`;
+      } else if (status === 'accepted') {
+        subject = 'Reservation fully accepted';
+        text = `Hi ${reservation.guest_name || 'there'},
+
+✅ Your ID has been verified and your reservation is now fully accepted.
+
+You're all set! We’ve confirmed everything with the landlord.
+
+Thanks for using Tajer — your space is officially reserved.
+
+Tajer Team`;
+
+        // ✅ Notify the landlord too
+        const landlordRes = await pool.query(
+          `SELECT email FROM users WHERE id = $1`,
+          [reservation.landlord_id]
+        );
+        const landlordEmail = landlordRes.rows?.[0]?.email;
+
+        if (landlordEmail) {
+          const landlordText = `Hi,
+
+Tenant ${reservation.guest_name} has successfully uploaded their ID, and it has been verified ✅.
+
+The tenant has completed payment, and the reservation is now fully accepted.
+
+You’ll receive your payout automatically.
+
+Tajer Team`;
+
+          await tranEmailApi.sendTransacEmail({
+            sender: { name: 'Tajer Rentals', email: 'support@tajernow.com' },
+            to: [{ email: landlordEmail }],
+            subject: 'Tenant verified and reservation accepted',
+            textContent: landlordText,
+          });
+        }
       } else if (status === 'rejected') {
-        text += `\n\n❌ Unfortunately, your reservation was not accepted this time.`;
+        subject = 'Reservation not accepted';
+        text = `Hi ${reservation.guest_name || 'there'},
+
+❌ Unfortunately, your reservation was not accepted this time.
+
+Thank you,
+Tajer Team`;
       } else if (status === 'docs_requested') {
-        text += `\n\n📑 Additional documents are required. Please use this link to upload them:\n${FRONTEND_URL}/checkout/${reservation.id}`;
+        subject = 'Additional documents required';
+        text = `Hi ${reservation.guest_name || 'there'},
+
+📑 Additional documents are required. Please use this link to upload them:
+${FRONTEND_URL}/checkout/${reservation.id}
+
+Thank you,
+Tajer Team`;
       }
 
-      text += `\n\nThank you,\nTajer Team`;
-      console.log("📤 Sending to:", reservation.guest_contact);
+      // ✅ Send guest email
+      if (subject && text) {
+        console.log('📤 Sending to guest:', reservation.guest_contact);
 
-      try {
-await tranEmailApi.sendTransacEmail({
-  sender: { name: "Tajer Rentals", email: "support@tajernow.com" },
-  to: [{ email: reservation.guest_contact }], // ✅ Use same pattern
-  subject,
-  textContent: text,
-});
-
-
-
-      } catch (err) {
-        console.error('Email sending failed:', err.message);
+        await tranEmailApi.sendTransacEmail({
+          sender: { name: 'Tajer Rentals', email: 'support@tajernow.com' },
+          to: [{ email: reservation.guest_contact }],
+          subject,
+          textContent: text,
+        });
       }
     }
 
