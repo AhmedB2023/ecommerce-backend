@@ -3,9 +3,10 @@ const express = require('express');
 const app = express(); // ✅ MISSING BEFORE
 // Stripe raw body middleware
 const bodyParser = require("body-parser");
+const db = require('./db');
 
-// Stripe requires the raw body to validate webhook signatures
-app.post("/webhook", bodyParser.raw({ type: "application/json" }));
+
+
 
 
 
@@ -28,7 +29,10 @@ app.use(cors({
 
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "https://tajernow.com");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept");
+  res.header("Access-Control-Allow-Credentials", "true");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS");
+  if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
 });
 
@@ -398,6 +402,8 @@ app.delete('/api/properties/:id', async (req, res) => {
 
 
 app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
+  console.log("🔥 Stripe webhook called");
+
   const sig = req.headers["stripe-signature"];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
