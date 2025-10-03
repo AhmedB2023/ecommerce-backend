@@ -3,6 +3,105 @@ const express = require('express');
 const app = express(); // ✅ MISSING BEFORE
 // Stripe raw body middleware
 const bodyParser = require("body-parser");
+
+const Stripe = require('stripe');
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
+// 📧 Brevo setup
+const SibApiV3Sdk = require('sib-api-v3-sdk');
+const defaultClient = SibApiV3Sdk.ApiClient.instance;
+const apiKey = defaultClient.authentications['api-key'];
+apiKey.apiKey = process.env.BREVO_API_KEY;
+const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+const sendEmail = require('./utils/sendEmail');
+
+app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
+  console.log("🔥 Stripe webhook called");
+
+  const sig = req.headers["stripe-signature"];
+  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err) {
+    console.error("❌ Webhook signature verification failed:", err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // ✅ Handle successful checkout session
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+    const reservationId = session.metadata?.reservationId;
+
+    if (!reservationId) {
+      console.error("⚠️ No reservationId in metadata");
+      return res.status(400).send("Missing reservationId");
+    }
+
+    try {
+      // 1. Update reservation status to 'accepted'
+      const result = await db.query(
+        "UPDATE reservations SET status = 'accepted' WHERE id = $1 RETURNING *",
+        [reservationId]
+      );
+      const reservation = result.rows[0];
+
+      if (!reservation) {
+        console.warn("⚠️ Reservation not found:", reservationId);
+        return res.status(404).send("Reservation not found");
+      }
+
+      // 2. Get landlord email
+      const landlordResult = await db.query(
+        "SELECT email FROM users WHERE id = $1",
+        [reservation.landlord_id]
+      );
+      const landlordEmail = landlordResult.rows[0]?.email;
+
+      // 3. Guest email comes from guest_contact (if it's an email format)
+      const tenantEmail = reservation.guest_contact;
+
+      // 4. Send confirmation emails (Brevo integration)
+      const sender = { name: "Tajer", email: "support@tajernow.com" };
+
+      const emailPromises = [];
+
+      if (tenantEmail?.includes("@")) {
+        emailPromises.push(
+          tranEmailApi.sendTransacEmail({
+            sender,
+            to: [{ email: tenantEmail }],
+            subject: "Your Reservation is Confirmed!",
+            htmlContent: `<p>Thank you for your payment. Your reservation for property #${reservation.property_id} has been confirmed.</p>`
+          })
+        );
+      }
+
+      if (landlordEmail) {
+        emailPromises.push(
+          tranEmailApi.sendTransacEmail({
+            sender,
+            to: [{ email: landlordEmail }],
+            subject: "New Reservation Confirmed",
+            htmlContent: `<p>A new reservation has been accepted for your property #${reservation.property_id}. Please check your dashboard for details.</p>`
+          })
+        );
+      }
+
+      await Promise.all(emailPromises);
+      console.log("✅ Emails sent to tenant and landlord.");
+    } catch (err) {
+      console.error("❌ Error processing webhook:", err.message);
+      return res.status(500).send("Webhook processing error");
+    }
+  }
+
+  res.status(200).json({ received: true });
+});
+
+
 const db = require('./db');
 
 
@@ -37,16 +136,6 @@ app.use((req, res, next) => {
 });
 
 
-const Stripe = require('stripe');
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
-
-// 📧 Brevo setup
-const SibApiV3Sdk = require('sib-api-v3-sdk');
-const defaultClient = SibApiV3Sdk.ApiClient.instance;
-const apiKey = defaultClient.authentications['api-key'];
-apiKey.apiKey = process.env.BREVO_API_KEY;
-const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
-const sendEmail = require('./utils/sendEmail');
 
 // 🧳 File upload setup
 const multer = require('multer');
@@ -401,91 +490,6 @@ app.delete('/api/properties/:id', async (req, res) => {
 
 
 
-app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
-  console.log("🔥 Stripe webhook called");
-
-  const sig = req.headers["stripe-signature"];
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
-  let event;
-
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-  } catch (err) {
-    console.error("❌ Webhook signature verification failed:", err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  // ✅ Handle successful checkout session
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object;
-    const reservationId = session.metadata?.reservationId;
-
-    if (!reservationId) {
-      console.error("⚠️ No reservationId in metadata");
-      return res.status(400).send("Missing reservationId");
-    }
-
-    try {
-      // 1. Update reservation status to 'accepted'
-      const result = await db.query(
-        "UPDATE reservations SET status = 'accepted' WHERE id = $1 RETURNING *",
-        [reservationId]
-      );
-      const reservation = result.rows[0];
-
-      if (!reservation) {
-        console.warn("⚠️ Reservation not found:", reservationId);
-        return res.status(404).send("Reservation not found");
-      }
-
-      // 2. Get landlord email
-      const landlordResult = await db.query(
-        "SELECT email FROM users WHERE id = $1",
-        [reservation.landlord_id]
-      );
-      const landlordEmail = landlordResult.rows[0]?.email;
-
-      // 3. Guest email comes from guest_contact (if it's an email format)
-      const tenantEmail = reservation.guest_contact;
-
-      // 4. Send confirmation emails (Brevo integration)
-      const sender = { name: "Tajer", email: "support@tajernow.com" };
-
-      const emailPromises = [];
-
-      if (tenantEmail?.includes("@")) {
-        emailPromises.push(
-          tranEmailApi.sendTransacEmail({
-            sender,
-            to: [{ email: tenantEmail }],
-            subject: "Your Reservation is Confirmed!",
-            htmlContent: `<p>Thank you for your payment. Your reservation for property #${reservation.property_id} has been confirmed.</p>`
-          })
-        );
-      }
-
-      if (landlordEmail) {
-        emailPromises.push(
-          tranEmailApi.sendTransacEmail({
-            sender,
-            to: [{ email: landlordEmail }],
-            subject: "New Reservation Confirmed",
-            htmlContent: `<p>A new reservation has been accepted for your property #${reservation.property_id}. Please check your dashboard for details.</p>`
-          })
-        );
-      }
-
-      await Promise.all(emailPromises);
-      console.log("✅ Emails sent to tenant and landlord.");
-    } catch (err) {
-      console.error("❌ Error processing webhook:", err.message);
-      return res.status(500).send("Webhook processing error");
-    }
-  }
-
-  res.status(200).json({ received: true });
-});
 
 
 app.get('/api/search', async (req, res) => {
