@@ -730,9 +730,11 @@ if (actualGuestContact && actualGuestContact.includes('@')) {
   try {
     const subject = "Reservation Submitted – Pending Landlord Approval";
     const text = `Hi ${actualGuestName || 'there'},\n\nThank you for submitting your reservation request.\n\n` +
-                 `Your offer of $${Number(actualOfferAmount).toFixed(2)} has been sent to the landlord.\n\n` +
-                 `You will receive another email once the landlord accepts your offer and approves checkout.\n\n` +
-                 `Reservation ID: ${reservationId}\n\nThank you,\nTajer Rentals`;
+             `Your offer of $${Number(actualOfferAmount).toFixed(2)} has been sent to the landlord.\n\n` +
+             `You will receive another email once the landlord accepts your offer and approves checkout.\n\n` +
+             `Reservation ID: ${reservationId}\n` +
+             `Barcode: ${barcodeText}\n\n` +
+             `Thank you,\nTajer Rentals`;
 
     await tranEmailApi.sendTransacEmail({
       sender: { name: "Tajer Rentals", email: "support@tajernow.com" },
