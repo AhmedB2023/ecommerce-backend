@@ -336,41 +336,46 @@ app.post("/api/create-checkout-session", async (req, res) => {
   try {
     const { propertyId, amount, tenantEmail, reservationId } = req.body;
 
-
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: "Invalid payment amount" });
     }
 
+    if (!tenantEmail || !propertyId) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Safely add metadata
+    const metadata = {};
+    if (reservationId) metadata.reservationId = reservationId.toString();
+
     const session = await stripe.checkout.sessions.create({
-  payment_method_types: ["card"],
-  customer_email: tenantEmail,
-  metadata: {
-    reservationId: reservationId.toString()
-  },
-  line_items: [
-    {
-      price_data: {
-        currency: "usd",
-        product_data: {
-          name: `Reservation Payment for Property #${propertyId}`,
+      payment_method_types: ["card"],
+      customer_email: tenantEmail,
+      metadata,
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: `Reservation Payment for Property #${propertyId}`,
+            },
+            unit_amount: Math.round(amount * 100), // Stripe requires amount in cents
+          },
+          quantity: 1,
         },
-        unit_amount: Math.round(amount * 100),
-      },
-      quantity: 1,
-    },
-  ],
-  mode: "payment",
-  success_url: `${process.env.APP_BASE_URL}/payment-success`,
-  cancel_url: `${process.env.APP_BASE_URL}/payment-cancel`,
-});
+      ],
+      mode: "payment",
+      success_url: `${process.env.APP_BASE_URL}/payment-success`,
+      cancel_url: `${process.env.APP_BASE_URL}/payment-cancel`,
+    });
 
-
-    res.json({ id: session.id, url: session.url });
+    return res.json({ id: session.id, url: session.url });
   } catch (error) {
     console.error("❌ Stripe error:", error.message);
-    res.status(500).json({ error: "Payment session failed" });
+    return res.status(500).json({ error: "Payment session failed" });
   }
 });
+
 
 // ✅ Soft delete property
 app.delete('/api/properties/:id', async (req, res) => {
