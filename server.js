@@ -250,12 +250,14 @@ ensureSchema();
 
 app.post('/api/properties', upload.array('images'), async (req, res) => {
   const {
-    name,
-    description,
+    title,
+    type_of_space,
+    price_per,
     min_price,
     max_price,
-    num_bedrooms,
-    num_bathrooms,
+    length,
+    width,
+    height,
     landlord_id,
     street_address,
     city,
@@ -265,11 +267,27 @@ app.post('/api/properties', upload.array('images'), async (req, res) => {
 
   const files = req.files;
 
-  if (!name || !min_price || !max_price || !landlord_id || !street_address || !city || !state || !zipcode) {
+  // ✅ Validate all required fields
+  if (
+    !title ||
+    !type_of_space ||
+    !price_per ||
+    !min_price ||
+    !max_price ||
+    !length ||
+    !width ||
+    !height ||
+    !landlord_id ||
+    !street_address ||
+    !city ||
+    !state ||
+    !zipcode
+  ) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
 
   try {
+    // ✅ Check if landlord exists and has proper role
     const roleCheck = await pool.query(
       'SELECT username, role FROM users WHERE id = $1',
       [landlord_id]
@@ -283,109 +301,45 @@ app.post('/api/properties', upload.array('images'), async (req, res) => {
       return res.status(403).json({ error: 'Only landlords can add properties' });
     }
 
-    // ✅ Insert property with address fields
+    // ✅ Insert property into the database
     const result = await pool.query(
       `INSERT INTO properties 
-       (name, description, min_price, max_price, num_bedrooms, num_bathrooms, landlord_id, street_address, city, state, zipcode)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        (title, type_of_space, price_per, min_price, max_price, length, width, height, landlord_id, street_address, city, state, zipcode)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
-      [name, description, min_price, max_price, num_bedrooms, num_bathrooms, landlord_id, street_address, city, state, zipcode]
+      [
+        title,
+        type_of_space,
+        price_per,
+        min_price,
+        max_price,
+        length,
+        width,
+        height,
+        landlord_id,
+        street_address,
+        city,
+        state,
+        zipcode
+      ]
     );
 
     const property = result.rows[0];
 
-    // ✅ Save images in property_images table
+    // ✅ Save uploaded images to property_images table
     for (const file of files) {
-      const fakeUrl = `https://ecommerce-backend-y3v4.onrender.com/uploads/${file.filename}`;
+      const imageUrl = `https://ecommerce-backend-y3v4.onrender.com/uploads/${file.filename}`;
       await pool.query(
         `INSERT INTO property_images (property_id, image_url)
          VALUES ($1, $2)`,
-        [property.id, fakeUrl]
+        [property.id, imageUrl]
       );
     }
 
-    res.json({ message: "✅ Property added with address + images", property });
+    res.json({ message: '✅ Property added with full details and images', property });
   } catch (err) {
     console.error('❌ Error inserting property:', err.message);
     res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// ✅ Get all active properties (with landlord, address, and images)
-app.get('/api/properties', async (req, res) => {
-  try {
-    const result = await pool.query(`
-      SELECT 
-        p.id, 
-        p.name, 
-        p.min_price, 
-        p.max_price,
-        p.description, 
-        p.num_bedrooms,
-        p.num_bathrooms,
-        p.street_address,
-        p.city,
-        p.state,
-        p.zipcode,
-        p.landlord_id,
-        u.username AS landlord_name
-      FROM properties p
-      JOIN users u ON p.landlord_id = u.id
-      WHERE u.role = 'landlord' AND p.is_active = true
-    `);
-
-    const properties = result.rows;
-
-    // Fetch all images
-    const imageResults = await pool.query(`
-      SELECT property_id, image_url 
-      FROM property_images
-    `);
-
-    // Group images by property_id
-    const imageMap = {};
-    imageResults.rows.forEach(img => {
-      if (!imageMap[img.property_id]) {
-        imageMap[img.property_id] = [];
-      }
-      imageMap[img.property_id].push(img.image_url);
-    });
-
-    // Attach image arrays to properties
-    const withImages = properties.map(p => ({
-      ...p,
-      images: imageMap[p.id] || []
-    }));
-
-    res.json(withImages);
-  } catch (err) {
-    console.error("❌ Error in /api/properties:", err.message);
-    res.status(500).send('Server error');
-  }
-});
-
-// ✅ Get one property by ID (with landlord info)
-app.get('/api/properties/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    const result = await pool.query(
-      `SELECT 
-        p.*, 
-        u.username AS landlord_name
-      FROM properties p
-      JOIN users u ON p.landlord_id = u.id
-      WHERE p.id = $1`,
-      [id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Property not found" });
-    }
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err.message);
-    res.status(500).send('Server error');
   }
 });
 
