@@ -832,6 +832,20 @@ app.put('/api/reservations/:id/status', async (req, res) => {
     }
 
     const reservation = rows[0];
+    // If the new status is accepted_pending_verification, reject all other pending reservations for the same property
+if (status === 'accepted_pending_verification') {
+  await pool.query(
+    `UPDATE reservations
+     SET status = 'rejected'
+     WHERE property_id = (
+       SELECT property_id FROM reservations WHERE id = $1
+     )
+     AND status = 'pending'
+     AND id != $1`,
+    [id]
+  );
+}
+
 
     // Only send emails if guest_contact looks like an email
     if (reservation.guest_contact && reservation.guest_contact.includes('@')) {
