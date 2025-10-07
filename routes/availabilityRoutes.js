@@ -7,7 +7,18 @@ const db = require('../db');
 // body: { from:"2025-10-10", to:"2025-11-10", available:true, note:"optional" }
 router.post('/properties/:propertyId/availability/range', async (req, res) => {
   const { propertyId } = req.params;
-  const { from, to, available = true, note = null } = req.body;
+  let { from, to, available = true, note = null } = req.body;
+
+if (!from) return res.status(400).json({ error: "from date is required" });
+
+// Default to = from + 1 year if not provided
+if (!to) {
+  const fromDate = new Date(from);
+  const oneYearLater = new Date(fromDate);
+  oneYearLater.setFullYear(fromDate.getFullYear() + 1);
+  to = oneYearLater.toISOString().split("T")[0];
+}
+
 
   if (!from || !to) return res.status(400).json({ error: "from and to are required (YYYY-MM-DD)" });
 
