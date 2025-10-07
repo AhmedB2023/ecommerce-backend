@@ -455,22 +455,28 @@ app.get('/api/search', async (req, res) => {
 
   try {
     const result = await pool.query(`
-      SELECT 
-        p.id, 
-        p.name, 
-        p.min_price, 
-        p.max_price,
-        p.description, 
-        p.num_bedrooms,
-        p.num_bathrooms,
-        p.street_address,
-        p.city,
-        p.state,
-        p.zipcode,
-        p.landlord_id,
-        u.username AS landlord_name
-      FROM properties p
-      JOIN users u ON p.landlord_id = u.id
+    SELECT 
+  p.id, 
+  p.title, 
+  p.min_price, 
+  p.max_price,
+  p.description, 
+  p.num_bedrooms,
+  p.num_bathrooms,
+  p.street_address,
+  p.city,
+  p.state,
+  p.zipcode,
+  p.length,
+  p.width,
+  p.height,
+  p.type_of_space,
+  p.price_per,
+  p.landlord_id,
+  u.username AS landlord_name
+FROM properties p
+JOIN users u ON p.landlord_id = u.id
+
       WHERE p.is_active = true AND (
         LOWER(p.city) LIKE LOWER($1) OR
         p.zipcode = $2
