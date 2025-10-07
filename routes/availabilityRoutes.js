@@ -78,5 +78,43 @@ router.get('/properties/:propertyId/availability', async (req, res) => {
     res.status(500).json({ error: "failed to fetch availability" });
   }
 });
+// GET /api/properties/:propertyId/next-available
+router.get('/properties/:propertyId/next-available', async (req, res) => {
+  const { propertyId } = req.params;
+
+  try {
+    const q = `
+      WITH dates AS (
+        SELECT gs::date AS day
+        FROM generate_series(current_date, current_date + interval '60 days', interval '1 day') gs
+      ),
+      avail AS (
+        SELECT d.day, COALESCE(pa.is_available, TRUE) AS is_available
+        FROM dates d
+        LEFT JOIN property_availability pa
+          ON pa.property_id = $1 AND pa.day = d.day
+      ),
+      reserved AS (
+        SELECT generate_series(r.start_date, r.end_date, '1 day')::date AS day
+        FROM reservations r
+        WHERE r.property_id = $1 AND r.status IN ('pending','accepted','accepted_pending_verification','paid','confirmed')
+      )
+      SELECT a.day
+      FROM avail a
+      WHERE a.is_available
+        AND NOT EXISTS (SELECT 1 FROM reserved r WHERE r.day = a.day)
+      ORDER BY a.day
+      LIMIT 1;
+    `;
+
+    const result = await db.query(q, [propertyId]);
+    const nextAvailable = result.rows[0]?.day;
+    res.json({ nextAvailable });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Failed to get next available date" });
+  }
+});
+
 
 module.exports = router;
