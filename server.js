@@ -144,6 +144,10 @@ const path = require('path');
 // ✅ Serve uploaded images statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// ✅ Mount availability routes here
+const availabilityRoutes = require('./routes/availabilityRoutes');
+app.use('/api', availabilityRoutes);
+
 // ✅ Store images to /uploads folder with unique names
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -184,61 +188,75 @@ const sendResetEmail = require('./utils/sendEmail');
 
 // ✅ Clean Real Estate Reservation Schema
 async function ensureSchema() {
-  const sql = `
-    CREATE TABLE IF NOT EXISTS users (
-      id SERIAL PRIMARY KEY,
-      username VARCHAR(50) NOT NULL,
-      email VARCHAR(100) NOT NULL UNIQUE,
-      password TEXT NOT NULL,
-      role VARCHAR(20) DEFAULT 'tenant',  -- roles: 'tenant' or 'landlord'
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+ const sql = `
+  CREATE TABLE IF NOT EXISTS users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(50) NOT NULL,
+    email VARCHAR(100) NOT NULL UNIQUE,
+    password TEXT NOT NULL,
+    role VARCHAR(20) DEFAULT 'tenant',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
 
-    CREATE TABLE IF NOT EXISTS properties (
-      id SERIAL PRIMARY KEY,
-      name VARCHAR(100) NOT NULL,
-      description TEXT,
-      min_price NUMERIC(10,2),               -- Minimum expected rent
-      max_price NUMERIC(10,2),               -- Maximum expected rent
-      num_bedrooms INTEGER,
-      num_bathrooms INTEGER,
-      landlord_id INTEGER REFERENCES users(id),
-      is_active BOOLEAN DEFAULT true,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+  CREATE TABLE IF NOT EXISTS properties (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+    min_price NUMERIC(10,2),
+    max_price NUMERIC(10,2),
+    num_bedrooms INTEGER,
+    num_bathrooms INTEGER,
+    landlord_id INTEGER REFERENCES users(id),
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
 
-    CREATE TABLE IF NOT EXISTS property_images (
-      id SERIAL PRIMARY KEY,
-      property_id INTEGER REFERENCES properties(id) ON DELETE CASCADE,
-      image_url TEXT NOT NULL
-    );
+  CREATE TABLE IF NOT EXISTS property_images (
+    id SERIAL PRIMARY KEY,
+    property_id INTEGER REFERENCES properties(id) ON DELETE CASCADE,
+    image_url TEXT NOT NULL
+  );
 
-    CREATE TABLE IF NOT EXISTS reservations (
-      id SERIAL PRIMARY KEY,
-      property_id INTEGER REFERENCES properties(id) ON DELETE CASCADE,
-      guest_name VARCHAR(100),
-      guest_contact VARCHAR(150),
-      offer_amount NUMERIC(10,2),            -- Tenant's proposed rent
-      reservation_code VARCHAR(50) UNIQUE,
-      landlord_id INTEGER REFERENCES users(id),
-      status VARCHAR(20) DEFAULT 'pending',  -- pending, accepted, rejected
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+  CREATE TABLE IF NOT EXISTS reservations (
+    id SERIAL PRIMARY KEY,
+    property_id INTEGER REFERENCES properties(id) ON DELETE CASCADE,
+    guest_name VARCHAR(100),
+    guest_contact VARCHAR(150),
+    offer_amount NUMERIC(10,2),
+    reservation_code VARCHAR(50) UNIQUE,
+    landlord_id INTEGER REFERENCES users(id),
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
 
-    CREATE TABLE IF NOT EXISTS favorites (
-      id SERIAL PRIMARY KEY,
-      user_id INTEGER REFERENCES users(id),
-      property_id INTEGER REFERENCES properties(id),
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    );
+  CREATE TABLE IF NOT EXISTS favorites (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    property_id INTEGER REFERENCES properties(id),
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
 
-    CREATE TABLE IF NOT EXISTS password_resets (
-      id SERIAL PRIMARY KEY,
-      email TEXT NOT NULL,
-      token TEXT NOT NULL,
-      expires_at TIMESTAMP NOT NULL
-    );
-  `;
+  CREATE TABLE IF NOT EXISTS password_resets (
+    id SERIAL PRIMARY KEY,
+    email TEXT NOT NULL,
+    token TEXT NOT NULL,
+    expires_at TIMESTAMP NOT NULL
+  );
+
+  -- ✅ New: property availability table
+  CREATE TABLE IF NOT EXISTS property_availability (
+    id SERIAL PRIMARY KEY,
+    property_id INTEGER NOT NULL REFERENCES properties(id) ON DELETE CASCADE,
+    day DATE NOT NULL,
+    is_available BOOLEAN NOT NULL DEFAULT TRUE,
+    note TEXT,
+    UNIQUE(property_id, day)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_prop_avail_prop_day
+    ON property_availability(property_id, day);
+`;
+
 
   await pool.query(sql);
 }
