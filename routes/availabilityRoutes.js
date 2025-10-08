@@ -7,35 +7,24 @@ const db = require('../db');
 // body: { from:"2025-10-10", to:"2025-11-10", available:true, note:"optional" }
 router.post('/properties/:propertyId/availability/range', async (req, res) => {
   const { propertyId } = req.params;
-  let { from, to, available = true, note = null } = req.body;
+  const { from, to, available = true } = req.body;
 
-if (!from) return res.status(400).json({ error: "from date is required" });
-
-// Default to = from + 1 year if not provided
-if (!to) {
-  const fromDate = new Date(from);
-  const oneYearLater = new Date(fromDate);
-  oneYearLater.setFullYear(fromDate.getFullYear() + 1);
-  to = oneYearLater.toISOString().split("T")[0];
-}
-
-
-  if (!from || !to) return res.status(400).json({ error: "from and to are required (YYYY-MM-DD)" });
+  if (!from || !to) {
+    return res.status(400).json({ error: "from and to are required" });
+  }
 
   try {
-    const q = `
-      INSERT INTO property_availability(property_id, day, is_available, note)
-      SELECT $1, gs::date, $4, $5
-      FROM generate_series($2::date, $3::date, '1 day') AS gs
-      ON CONFLICT (property_id, day)
-      DO UPDATE SET is_available = EXCLUDED.is_available, note = EXCLUDED.note
-      RETURNING property_id, day, is_available, note
-    `;
-    const { rows } = await db.query(q, [propertyId, from, to, available, note]);
-    res.json(rows);
+    await db.query(`
+      INSERT INTO availability(property_id, start_date, end_date, is_available)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (property_id)
+      DO UPDATE SET start_date = $2, end_date = $3, is_available = $4
+    `, [propertyId, from, to, available]);
+
+    res.json({ message: "Availability updated" });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: "failed to save availability" });
+    res.status(500).json({ error: "Failed to update availability" });
   }
 });
 
