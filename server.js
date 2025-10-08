@@ -586,10 +586,17 @@ app.get('/api/landlord/by-name/:landlordName', async (req, res) => {
 app.get('/api/landlord/:landlordId/properties', async (req, res) => {
   const { landlordId } = req.params;
   try {
-    const result = await pool.query(
-      'SELECT * FROM properties WHERE landlord_id = $1 AND is_active = true',
-      [landlordId]
-    );
+    const result = await pool.query(`
+  SELECT 
+    p.*,
+    a.start_date,
+    a.end_date,
+    a.is_available
+  FROM properties p
+  LEFT JOIN availability a ON p.id = a.property_id
+  WHERE p.landlord_id = $1 AND p.is_active = true
+`, [landlordId]);
+
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching landlord properties:', error);
