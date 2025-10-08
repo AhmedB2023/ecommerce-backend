@@ -343,7 +343,7 @@ app.post('/api/properties', upload.array('images'), async (req, res) => {
     );
 
     const property = result.rows[0];
-    
+
     const { start_date, end_date } = req.body;
 
 await pool.query(
@@ -507,33 +507,37 @@ app.get('/api/search', async (req, res) => {
 
   try {
     // Get matching properties
-    const result = await pool.query(`
-      SELECT 
-        p.id, 
-        p.title, 
-        p.min_price, 
-        p.max_price,
-        p.description, 
-        p.num_bedrooms,
-        p.num_bathrooms,
-        p.street_address,
-        p.city,
-        p.state,
-        p.zipcode,
-        p.length,
-        p.width,
-        p.height,
-        p.type_of_space,
-        p.price_per,
-        p.landlord_id,
-        u.username AS landlord_name
-      FROM properties p
-      JOIN users u ON p.landlord_id = u.id
-      WHERE p.is_active = true AND (
-        LOWER(p.city) LIKE LOWER($1) OR
-        p.zipcode = $2
-      )
-    `, [`%${query}%`, query]);
+   const result = await pool.query(`
+  SELECT 
+    p.id, 
+    p.title, 
+    p.min_price, 
+    p.max_price,
+    p.description, 
+    p.num_bedrooms,
+    p.num_bathrooms,
+    p.street_address,
+    p.city,
+    p.state,
+    p.zipcode,
+    p.length,
+    p.width,
+    p.height,
+    p.type_of_space,
+    p.price_per,
+    p.landlord_id,
+    u.username AS landlord_name,
+    a.start_date,
+    a.end_date
+  FROM properties p
+  JOIN users u ON p.landlord_id = u.id
+  LEFT JOIN availability a ON p.id = a.property_id
+  WHERE p.is_active = true AND (
+    LOWER(p.city) LIKE LOWER($1) OR
+    p.zipcode = $2
+  )
+`, [`%${query}%`, query]);
+
 
     const properties = result.rows;
 
