@@ -7,10 +7,15 @@ const db = require('../db');
 // body: { from:"2025-10-10", to:"2025-11-10", available:true, note:"optional" }
 router.post('/properties/:propertyId/availability/range', async (req, res) => {
   const { propertyId } = req.params;
-  const { from, to, available = true } = req.body;
+  let { from, to, available = true } = req.body;
 
-  if (!from || !to) {
-    return res.status(400).json({ error: "from and to are required" });
+  if (!from) {
+    return res.status(400).json({ error: "Start date (from) is required" });
+  }
+
+  // Allow open-ended range
+  if (!to || to === "") {
+    to = null;
   }
 
   try {
