@@ -126,15 +126,6 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://tajernow.com");
-  res.header("Access-Control-Allow-Credentials", "true");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
-  res.header("Access-Control-Allow-Methods", "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS");
-  if (req.method === "OPTIONS") return res.sendStatus(200);
-  next();
-});
-
 
 
 // 🧳 File upload setup
@@ -537,7 +528,6 @@ app.get('/api/search', async (req, res) => {
     p.zipcode = $2
   )
 `, [`%${query}%`, query]);
-
 
     const properties = result.rows;
 
