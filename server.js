@@ -343,6 +343,15 @@ app.post('/api/properties', upload.array('images'), async (req, res) => {
     );
 
     const property = result.rows[0];
+    
+    const { start_date, end_date } = req.body;
+
+await pool.query(
+  `INSERT INTO availability (property_id, start_date, end_date)
+   VALUES ($1, $2, $3)`,
+  [property.id, start_date, end_date || null] // use null for open-ended
+);
+
 
     // ✅ Save uploaded images to property_images table
     for (const file of files) {
