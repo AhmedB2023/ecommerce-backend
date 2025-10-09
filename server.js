@@ -868,6 +868,26 @@ app.put('/api/reservations/:id/status', async (req, res) => {
     }
 
     const reservation = rows[0];
+    // Prevent multiple accepted tenants for the same property
+if (status === 'accepted_pending_verification') {
+  const checkExisting = await pool.query(
+    `SELECT id FROM reservations 
+     WHERE property_id = (
+       SELECT property_id FROM reservations WHERE id = $1
+     )
+     AND status = 'accepted_pending_verification'
+     AND id <> $1`,
+    [id]
+  );
+
+  if (checkExisting.rows.length > 0) {
+    return res.status(400).json({
+      error: 'A tenant is already accepted for this property. You cannot accept another until that one is completed or rejected.'
+    });
+  }
+}
+
+
     // If the new status is accepted_pending_verification, reject all other pending reservations for the same property
 //if (status === 'accepted_pending_verification') {
   //const { rows: rejectedRows } = await pool.query(
