@@ -58,7 +58,6 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
 
   const sig = req.headers["stripe-signature"];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-
   let event;
 
   try {
@@ -79,57 +78,88 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
     }
 
     try {
-      // 1. Update reservation status to 'accepted'
+      // 1️⃣ Update reservation status to 'accepted'
       const result = await db.query(
         "UPDATE reservations SET status = 'accepted' WHERE id = $1 RETURNING *",
         [reservationId]
       );
       const reservation = result.rows[0];
+      if (!reservation) return res.status(404).send("Reservation not found");
 
-      if (!reservation) {
-        console.warn("⚠️ Reservation not found:", reservationId);
-        return res.status(404).send("Reservation not found");
-      }
-
-      // 2. Get landlord email
-      const landlordResult = await db.query(
-        "SELECT email FROM users WHERE id = $1",
-        [reservation.landlord_id]
+      // 2️⃣ Reject all other reservations for this same property
+      await db.query(
+        "UPDATE reservations SET status = 'rejected' WHERE property_id = $1 AND id != $2 AND status IN ('pending', 'accepted_pending_verification')",
+        [reservation.property_id, reservation.id]
       );
-      const landlordEmail = landlordResult.rows[0]?.email;
+      console.log(`🔁 Rejected other reservations for property ${reservation.property_id}`);
 
-      // 3. Guest email comes from guest_contact (if it's an email format)
+      // 3️⃣ Fetch landlord and tenant emails
+      const landlordRes = await db.query("SELECT email FROM users WHERE id = $1", [reservation.landlord_id]);
+      const landlordEmail = landlordRes.rows[0]?.email;
       const tenantEmail = reservation.guest_contact;
 
-      // 4. Send confirmation emails (Brevo integration)
       const sender = { name: "Tajer", email: "support@tajernow.com" };
-
       const emailPromises = [];
 
+      // 4️⃣ Send confirmation email to tenant
       if (tenantEmail?.includes("@")) {
         emailPromises.push(
           tranEmailApi.sendTransacEmail({
             sender,
             to: [{ email: tenantEmail }],
-            subject: "Your Reservation is Confirmed!",
-            htmlContent: `<p>Thank you for your payment. Your reservation for property #${reservation.property_id} has been confirmed.</p>`
+            subject: "🎉 Your Reservation is Confirmed!",
+            htmlContent: `
+              <p>Thank you for your payment. Your reservation for property #${reservation.property_id} has been <b>confirmed</b>.</p>
+              <p>You can now contact the landlord for further details.</p>
+              <p>– The Tajer Team</p>
+            `
           })
         );
       }
 
+      // 5️⃣ Send notification email to landlord
       if (landlordEmail) {
         emailPromises.push(
           tranEmailApi.sendTransacEmail({
             sender,
             to: [{ email: landlordEmail }],
-            subject: "New Reservation Confirmed",
-            htmlContent: `<p>A new reservation has been accepted for your property #${reservation.property_id}. Please check your dashboard for details.</p>`
+            subject: "✅ Reservation Confirmed for Your Property",
+            htmlContent: `
+              <p>Your property #${reservation.property_id} now has a confirmed reservation.</p>
+              <p>All other pending offers have been automatically rejected.</p>
+              <p>– The Tajer Team</p>
+            `
           })
         );
       }
 
+      // 6️⃣ Send rejection emails to other tenants
+      const rejectedRes = await db.query(
+        "SELECT guest_contact FROM reservations WHERE property_id = $1 AND id != $2 AND status = 'rejected'",
+        [reservation.property_id, reservation.id]
+      );
+
+      for (const r of rejectedRes.rows) {
+        if (r.guest_contact?.includes("@")) {
+          emailPromises.push(
+            tranEmailApi.sendTransacEmail({
+              sender,
+              to: [{ email: r.guest_contact }],
+              subject: "Reservation Update",
+              htmlContent: `
+                <p>We appreciate your interest in this property.</p>
+                <p>Unfortunately, another reservation was accepted for the same property.</p>
+                <p>Please feel free to explore other listings on <a href="https://tajernow.com">Tajer</a>.</p>
+              `
+            })
+          );
+        }
+      }
+
+      // 7️⃣ Send all emails concurrently
       await Promise.all(emailPromises);
-      console.log("✅ Emails sent to tenant and landlord.");
+      console.log("✅ Emails sent to accepted tenant, landlord, and rejected tenants.");
+
     } catch (err) {
       console.error("❌ Error processing webhook:", err.message);
       return res.status(500).send("Webhook processing error");
@@ -138,6 +168,7 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
 
   res.status(200).json({ received: true });
 });
+
 
 
 const db = require('./db');
@@ -882,7 +913,7 @@ if (status === 'accepted_pending_verification') {
 
   if (checkExisting.rows.length > 0) {
     return res.status(400).json({
-      error: 'A tenant is already accepted for this property. You cannot accept another until that one is completed or rejected.'
+      error: 'You cannot accept another reservation while one is pending verification for this property'
     });
   }
 }
