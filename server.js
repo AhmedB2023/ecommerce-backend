@@ -1,10 +1,48 @@
 require('dotenv').config();
 const express = require('express');
 const app = express(); // ✅ MISSING BEFORE
+const cors = require('cors');
+const path = require('path');
+// 🧳 File upload setup
+const multer = require('multer');
 // Stripe raw body middleware
 const bodyParser = require("body-parser");
 
 const Stripe = require('stripe');
+const bcrypt = require('bcryptjs');
+
+const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
+const pool = require('./db');
+
+
+
+
+const sendResetEmail = require('./utils/sendEmail');
+
+const allowedOrigins = ['https://tajernow.com', 'http://localhost:3000'];
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS not allowed"));
+    }
+  },
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
+  allowedHeaders: "Content-Type,Authorization",
+  credentials: true,
+}));
+
+app.use(express.json());
+// ✅ Serve uploaded images statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+
+
+
+
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 // 📧 Brevo setup
@@ -109,31 +147,14 @@ const db = require('./db');
 
 
 
-app.use(express.json());
-const cors = require('cors');
-const allowedOrigins = ['https://tajernow.com', 'http://localhost:3000'];
-
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("CORS not allowed"));
-    }
-  },
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
-  allowedHeaders: "Content-Type,Authorization",
-  credentials: true,
-}));
 
 
 
-// 🧳 File upload setup
-const multer = require('multer');
-const path = require('path');
 
-// ✅ Serve uploaded images statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+
+
+
 
 // ✅ Mount availability routes here
 const availabilityRoutes = require('./routes/availabilityRoutes');
@@ -166,11 +187,7 @@ if (process.env.NODE_ENV !== 'production') {
 
 
 
-const pool = require('./db');
-const bcrypt = require('bcryptjs');
-const { v4: uuidv4 } = require('uuid');
-const crypto = require('crypto');
-const sendResetEmail = require('./utils/sendEmail');
+
 
 
 
