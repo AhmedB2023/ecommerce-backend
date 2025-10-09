@@ -852,31 +852,31 @@ app.put('/api/reservations/:id/status', async (req, res) => {
 
     const reservation = rows[0];
     // If the new status is accepted_pending_verification, reject all other pending reservations for the same property
-if (status === 'accepted_pending_verification') {
-  const { rows: rejectedRows } = await pool.query(
-    `UPDATE reservations
-     SET status = 'rejected'
-     WHERE property_id = (
-       SELECT property_id FROM reservations WHERE id = $1
-     )
-     AND status = 'pending'
-     AND id != $1
-     RETURNING id, guest_name, guest_contact`,
-    [id]
-  );
+//if (status === 'accepted_pending_verification') {
+  //const { rows: rejectedRows } = await pool.query(
+    //`UPDATE reservations
+    // SET status = 'rejected'
+    // WHERE property_id = (
+    //   SELECT property_id FROM reservations WHERE id = $1
+     //)
+    // AND status = 'pending'
+    // AND id != $1
+    // RETURNING id, guest_name, guest_contact`,
+   // [id]
+  //);
 
   // Send rejection emails to those tenants
-  for (const r of rejectedRows) {
-    if (r.guest_contact && r.guest_contact.includes('@')) {
-      await tranEmailApi.sendTransacEmail({
-        sender: { name: 'Tajer Rentals', email: 'support@tajernow.com' },
-        to: [{ email: r.guest_contact }],
-        subject: 'Reservation not accepted',
-        textContent: `Hi ${r.guest_name || 'there'},\n\n❌ Unfortunately, your reservation was not accepted this time.\n\nThank you,\nTajer Team`,
-      });
-    }
-  }
-}
+  //for (const r of rejectedRows) {
+   // if (r.guest_contact && r.guest_contact.includes('@')) {
+    //  await tranEmailApi.sendTransacEmail({
+     //   sender: { name: 'Tajer Rentals', email: 'support@tajernow.com' },
+     //   to: [{ email: r.guest_contact }],
+     //   subject: 'Reservation not accepted',
+    //    textContent: `Hi ${r.guest_name || 'there'},\n\n❌ Unfortunately, your reservation was not accepted this time.\n\nThank you,\nTajer Team`,
+    //  });
+   // }
+  //}
+//}
 
 
     // Only send emails if guest_contact looks like an email
