@@ -79,6 +79,8 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
 
     try {
       // 1️⃣ Update reservation status to 'accepted'
+      console.log("🔍 reservationId from Stripe metadata:", reservationId);
+
       const result = await db.query(
         "UPDATE reservations SET status = 'accepted' WHERE id = $1 RETURNING *",
         [reservationId]
