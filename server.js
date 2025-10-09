@@ -86,11 +86,12 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
       const reservation = result.rows[0];
       if (!reservation) return res.status(404).send("Reservation not found");
 
-      // 2️⃣ Reject all other reservations for this same property
-      await db.query(
-        "UPDATE reservations SET status = 'rejected' WHERE property_id = $1 AND id != $2 AND status IN ('pending', 'accepted_pending_verification')",
-        [reservation.property_id, reservation.id]
-      );
+      // 2️⃣ Reject only PENDING reservations for this property (leave accepted_pending_verification untouched)
+await db.query(
+  "UPDATE reservations SET status = 'rejected' WHERE property_id = $1 AND id <> $2 AND status = 'pending'",
+  [reservation.property_id, reservation.id]
+);
+
       console.log(`🔁 Rejected other reservations for property ${reservation.property_id}`);
 
       // 3️⃣ Fetch landlord and tenant emails
