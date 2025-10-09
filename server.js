@@ -34,8 +34,10 @@ app.use(cors({
   allowedHeaders: "Content-Type,Authorization",
   credentials: true,
 }));
-
+app.post("/webhook", bodyParser.raw({ type: "application/json" }));
 app.use(express.json());
+
+
 // ✅ Serve uploaded images statically
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
