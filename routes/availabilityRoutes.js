@@ -24,7 +24,7 @@ router.post('/properties/:propertyId/availability/range', async (req, res) => {
       VALUES ($1, $2, $3, $4)
       ON CONFLICT (property_id)
       DO UPDATE SET start_date = $2, end_date = $3, is_available = $4
-    `, [propertyId, from, to, available]);
+    `, [propertyId, from?.split("T")[0], to?.split("T")[0], available]);
 
     res.json({ message: "Availability updated" });
   } catch (e) {
