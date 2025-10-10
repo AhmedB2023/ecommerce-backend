@@ -20,11 +20,15 @@ router.post('/properties/:propertyId/availability/range', async (req, res) => {
 
   try {
     await db.query(`
-      INSERT INTO availability(property_id, start_date, end_date, is_available)
-      VALUES ($1, $2, $3, $4)
-      ON CONFLICT (property_id)
-      DO UPDATE SET start_date = $2, end_date = $3, is_available = $4
-    `, [propertyId, from?.split("T")[0], to?.split("T")[0], available]);
+  INSERT INTO availability (property_id, start_date, end_date, is_available, created_at)
+  VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)
+  ON CONFLICT (property_id)
+  DO UPDATE SET 
+    start_date = EXCLUDED.start_date,
+    end_date = EXCLUDED.end_date,
+    is_available = EXCLUDED.is_available
+`, [propertyId, from?.split("T")[0], to?.split("T")[0], available]);
+
 
     res.json({ message: "Availability updated" });
   } catch (e) {
