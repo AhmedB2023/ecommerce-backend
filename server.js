@@ -364,7 +364,7 @@ app.post('/api/properties', upload.array('images'), async (req, res) => {
     const result = await pool.query(
       `INSERT INTO properties 
         (title, type_of_space, price_per, price, length, width, height, landlord_id, street_address, city, state, zipcode)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
        RETURNING *`,
       [
         title,
