@@ -572,9 +572,12 @@ app.get('/api/search', async (req, res) => {
   JOIN users u ON p.landlord_id = u.id
   LEFT JOIN availability a ON p.id = a.property_id
   WHERE p.is_active = true AND (
-    LOWER(p.city) LIKE LOWER($1) OR
-    p.zipcode = $2
-  )
+  LOWER(p.city) LIKE LOWER($1) OR
+  p.zipcode = $2 OR
+  LOWER(p.title) LIKE LOWER($1) OR
+  LOWER(p.description) LIKE LOWER($1)
+)
+
 `, [`%${query}%`, query]);
 
     const properties = result.rows;
