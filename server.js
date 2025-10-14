@@ -332,7 +332,7 @@ app.post('/api/properties', upload.array('images'), async (req, res) => {
     !title ||
     !type_of_space ||
     !price_per ||
-    price ||
+    !price ||
     !length ||
     !width ||
     !height ||
