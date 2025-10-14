@@ -546,53 +546,52 @@ app.get('/api/search', async (req, res) => {
   }
 
   try {
-    // Get matching properties
-   const result = await pool.query(`
-  SELECT 
-    p.id, 
-    p.title,  
-    p.price,
-    p.description, 
-    p.num_bedrooms,
-    p.num_bathrooms,
-    p.street_address,
-    p.city,
-    p.state,
-    p.zipcode,
-    p.length,
-    p.width,
-    p.height,
-    p.type_of_space,
-    p.price_per,
-    p.landlord_id,
-    u.username AS landlord_name,
-    a.start_date,
-    a.end_date
-  FROM properties p
-  JOIN users u ON p.landlord_id = u.id
-  LEFT JOIN availability a ON p.id = a.property_id
-  WHERE p.is_active = true AND (
-  LOWER(p.city) LIKE LOWER($1) OR
-  p.zipcode = $2 OR
-  LOWER(p.title) LIKE LOWER($1) OR
-  LOWER(p.description) LIKE LOWER($1)
-)
+    // Optional: lower the similarity threshold if you want broader matches
+    await pool.query(`SET pg_trgm.similarity_threshold = 0.2`);
 
-`, [`%${query}%`, query]);
+    const result = await pool.query(`
+      SELECT 
+        p.id, 
+        p.title,  
+        p.price,
+        p.description, 
+        p.num_bedrooms,
+        p.num_bathrooms,
+        p.street_address,
+        p.city,
+        p.state,
+        p.zipcode,
+        p.length,
+        p.width,
+        p.height,
+        p.type_of_space,
+        p.price_per,
+        p.landlord_id,
+        u.username AS landlord_name,
+        a.start_date,
+        a.end_date
+      FROM properties p
+      JOIN users u ON p.landlord_id = u.id
+      LEFT JOIN availability a ON p.id = a.property_id
+      WHERE p.is_active = true AND (
+        p.city % $1 OR
+        p.title % $1 OR
+        p.description % $1 OR
+        p.zipcode = $2
+      )
+    `, [query, query]);
 
     const properties = result.rows;
 
-    // ✅ Only fetch images for matched property IDs
     const propertyIds = properties.map(p => p.id);
-
     let imageMap = {};
+
     if (propertyIds.length > 0) {
       const imageResults = await pool.query(
         `SELECT property_id, image_url FROM property_images WHERE property_id = ANY($1)`,
         [propertyIds]
       );
 
-      // Group images by property_id
       imageResults.rows.forEach(img => {
         if (!imageMap[img.property_id]) {
           imageMap[img.property_id] = [];
@@ -601,7 +600,6 @@ app.get('/api/search', async (req, res) => {
       });
     }
 
-    // Attach images to properties
     const withImages = properties.map(p => ({
       ...p,
       images: imageMap[p.id] || []
