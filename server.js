@@ -246,8 +246,7 @@ async function ensureSchema() {
     id SERIAL PRIMARY KEY,
     name VARCHAR(100) NOT NULL,
     description TEXT,
-    min_price NUMERIC(10,2),
-    max_price NUMERIC(10,2),
+    price NUMERIC(10,2),
     num_bedrooms INTEGER,
     num_bathrooms INTEGER,
     landlord_id INTEGER REFERENCES users(id),
@@ -315,8 +314,7 @@ app.post('/api/properties', upload.array('images'), async (req, res) => {
     title,
     type_of_space,
     price_per,
-    min_price,
-    max_price,
+    price,
     length,
     width,
     height,
@@ -334,8 +332,7 @@ app.post('/api/properties', upload.array('images'), async (req, res) => {
     !title ||
     !type_of_space ||
     !price_per ||
-    !min_price ||
-    !max_price ||
+    price ||
     !length ||
     !width ||
     !height ||
@@ -366,15 +363,14 @@ app.post('/api/properties', upload.array('images'), async (req, res) => {
     // ✅ Insert property into the database
     const result = await pool.query(
       `INSERT INTO properties 
-        (title, type_of_space, price_per, min_price, max_price, length, width, height, landlord_id, street_address, city, state, zipcode)
+        (title, type_of_space, price_per, price, length, width, height, landlord_id, street_address, city, state, zipcode)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
        RETURNING *`,
       [
         title,
         type_of_space,
         price_per,
-        min_price,
-        max_price,
+        price,
         length,
         width,
         height,
@@ -554,9 +550,8 @@ app.get('/api/search', async (req, res) => {
    const result = await pool.query(`
   SELECT 
     p.id, 
-    p.title, 
-    p.min_price, 
-    p.max_price,
+    p.title,  
+    p.price,
     p.description, 
     p.num_bedrooms,
     p.num_bathrooms,
