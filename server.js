@@ -737,6 +737,8 @@ app.get('/api/landlord/:landlordId/reservations', async (req, res) => {
 // ✅ Reserve property (tenant -> landlord)
 app.post('/api/reserve-order', async (req, res) => {
   console.log('Incoming rental request:', req.body);
+  console.log("✅ Tenant ID received from frontend:", req.body.tenant_id || req.body.userId);
+
 
   const {
     tenant_id,
