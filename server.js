@@ -784,12 +784,13 @@ app.post('/api/reserve-order', async (req, res) => {
     const landlordName = landlordResult.rows[0]?.username;
 
     // ✅ Insert directly into reservations with offer_amount
-    const { rows } = await client.query(
+   const { rows } = await client.query(
   `INSERT INTO reservations 
-     (guest_name, guest_contact, landlord_id, property_id, quantity, offer_amount, reservation_code, created_at, start_date, end_date)
-   VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9)
+     (tenant_id, guest_name, guest_contact, landlord_id, property_id, quantity, offer_amount, reservation_code, created_at, start_date, end_date)
+   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), $9, $10)
    RETURNING id`,
   [
+    actualTenantId,        // ✅ tenant_id
     actualGuestName,
     actualGuestContact,
     landlord_id,
@@ -801,6 +802,7 @@ app.post('/api/reserve-order', async (req, res) => {
     req.body.end_date,
   ]
 );
+
 
 
     const reservationId = rows[0].id;
