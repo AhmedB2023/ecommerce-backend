@@ -1067,20 +1067,22 @@ app.get('/api/reservations', async (req, res) => {
   }
 
   try {
-    const { rows } = await pool.query(
-      `
-      SELECT r.id, r.property_id, r.status, r.offer_amount, r.created_at,
-             p.title, p.address, p.city, p.state, p.zipcode,
-             ARRAY_AGG(pi.image_url) AS images
-      FROM reservations r
-      JOIN properties p ON r.property_id = p.id
-      LEFT JOIN property_images pi ON pi.property_id = p.id
-      WHERE r.tenant_id = $1
-      GROUP BY r.id, p.title, p.address, p.city, p.state, p.zipcode
-      ORDER BY r.created_at DESC
-      `,
-      [tenantId]
-    );
+   const { rows } = await pool.query(
+  `
+  SELECT r.id, r.property_id, r.status, r.offer_amount, r.created_at,
+         p.title, p.street_address, p.city, p.state, p.zipcode,
+         p.price, p.price_per,
+         ARRAY_AGG(pi.image_url) AS images
+  FROM reservations r
+  JOIN properties p ON r.property_id = p.id
+  LEFT JOIN property_images pi ON pi.property_id = p.id
+  WHERE r.tenant_id = $1
+  GROUP BY r.id, p.title, p.street_address, p.city, p.state, p.zipcode, p.price, p.price_per
+  ORDER BY r.created_at DESC;
+  `,
+  [tenantId]
+);
+
 
     res.json(rows);
   } catch (err) {
