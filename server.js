@@ -1056,32 +1056,37 @@ Tajer Team`;
 
 
 
-// ✅ Get tenant orders
-app.get('/api/orders', async (req, res) => {
-  const { userId } = req.query;
+// ✅ Get all reservations for a specific tenant (updated)
+app.get('/api/reservations', async (req, res) => {
+  const { tenantId } = req.query;
+
+  if (!tenantId) {
+    return res.status(400).json({ error: 'tenantId is required' });
+  }
+
   try {
-    const result = await pool.query(
+    const { rows } = await pool.query(
       `
-      SELECT o.id AS order_id, o.landlord_id, o.tenant_id, o.barcode,
-             o.guest_name, o.guest_contact, o.created_at,
-             json_agg(json_build_object(
-               'property_id', oi.property_id,
-               'quantity', oi.quantity
-             )) AS order_items
-      FROM orders o
-      LEFT JOIN order_items oi ON o.id = oi.order_id
-      WHERE o.tenant_id = $1
-      GROUP BY o.id
-      ORDER BY o.created_at DESC
+      SELECT r.id, r.property_id, r.status, r.offer_amount, r.created_at,
+             p.title, p.address, p.city, p.state, p.zipcode,
+             ARRAY_AGG(pi.image_url) AS images
+      FROM reservations r
+      JOIN properties p ON r.property_id = p.id
+      LEFT JOIN property_images pi ON pi.property_id = p.id
+      WHERE r.tenant_id = $1
+      GROUP BY r.id, p.title, p.address, p.city, p.state, p.zipcode
+      ORDER BY r.created_at DESC
       `,
-      [userId]
+      [tenantId]
     );
-    res.json(result.rows);
+
+    res.json(rows);
   } catch (err) {
-    console.error('Fetch orders error:', err.message);
-    res.status(500).json({ message: 'Server error' });
+    console.error('Error fetching tenant reservations:', err.message);
+    res.status(500).json({ error: 'Failed to fetch reservations' });
   }
 });
+
 
 // ✅ Forgot password
 app.post('/api/forgot-password', async (req, res) => {
