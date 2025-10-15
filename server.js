@@ -549,37 +549,44 @@ app.get('/api/search', async (req, res) => {
     // Optional: lower the similarity threshold if you want broader matches
     await pool.query(`SET pg_trgm.similarity_threshold = 0.2`);
 
-    const result = await pool.query(`
-      SELECT 
-        p.id, 
-        p.title,  
-        p.price,
-        p.description, 
-        p.num_bedrooms,
-        p.num_bathrooms,
-        p.street_address,
-        p.city,
-        p.state,
-        p.zipcode,
-        p.length,
-        p.width,
-        p.height,
-        p.type_of_space,
-        p.price_per,
-        p.landlord_id,
-        u.username AS landlord_name,
-        a.start_date,
-        a.end_date
-      FROM properties p
-      JOIN users u ON p.landlord_id = u.id
-      LEFT JOIN availability a ON p.id = a.property_id
-      WHERE p.is_active = true AND (
-        p.city % $1 OR
-        p.title % $1 OR
-        p.description % $1 OR
-        p.zipcode = $2
-      )
-    `, [query, query]);
+   const result = await pool.query(
+  `
+  SELECT 
+    p.id, 
+    p.title,  
+    p.price,
+    p.description, 
+    p.num_bedrooms,
+    p.num_bathrooms,
+    p.street_address,
+    p.city,
+    p.state,
+    p.zipcode,
+    p.length,
+    p.width,
+    p.height,
+    p.type_of_space,
+    p.price_per,
+    p.landlord_id,
+    u.username AS landlord_name,
+    COALESCE(a.start_date, NULL) AS start_date,
+    COALESCE(a.end_date, NULL) AS end_date
+  FROM properties p
+  JOIN users u ON p.landlord_id = u.id
+  LEFT JOIN availability a ON a.property_id = p.id
+  WHERE p.is_active = true AND (
+    LOWER(p.city) LIKE LOWER($1) || '%' OR
+    LOWER(p.title) LIKE '%' || LOWER($1) || '%' OR
+    LOWER(p.description) LIKE '%' || LOWER($1) || '%' OR
+    p.zipcode = $1
+  )
+  GROUP BY p.id, u.username, a.start_date, a.end_date
+  ORDER BY p.created_at DESC
+  LIMIT 20;
+  `,
+  [query]
+);
+
 
     const properties = result.rows;
 
