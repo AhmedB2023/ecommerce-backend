@@ -717,16 +717,17 @@ app.get('/api/landlord/:landlordId/reservations', async (req, res) => {
 
     // ✅ Fetch updated list
     const { rows } = await pool.query(`
-      SELECT 
-        r.id,
-        r.guest_name,
-        r.guest_contact,
-        r.created_at,
-        r.quantity,
-        r.status,
-        r.offer_amount,
-        r.id_verified,
-        p.title AS property_name
+    SELECT 
+  r.id,
+  r.guest_name,
+  r.guest_contact,
+  r.created_at,
+  r.quantity,
+  r.status,
+  r.offer_amount AS price,  -- ✅ rename offer_amount as price
+  r.id_verified,
+  p.title AS property_name
+
       FROM reservations r
       JOIN properties p ON r.property_id = p.id
       WHERE r.landlord_id = $1
