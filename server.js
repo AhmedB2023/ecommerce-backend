@@ -1145,6 +1145,11 @@ app.post('/api/reset-password', async (req, res) => {
   }
 });
 
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ status: 'ok', message: 'Tajer backend is alive!' });
+});
+
+
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
   console.log(`✅ Backend server running on port ${PORT}`);
