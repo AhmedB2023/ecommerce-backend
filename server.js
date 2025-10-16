@@ -445,23 +445,35 @@ app.get('/api/properties/:id/images', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
-// ✅ Create Checkout Session
+// ✅ Create Checkout Session (secure)
 app.post("/api/create-checkout-session", async (req, res) => {
   try {
-    const { propertyId, amount, tenantEmail, reservationId } = req.body;
-
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ error: "Invalid payment amount" });
-    }
+    const { propertyId, tenantEmail, reservationId } = req.body;
 
     if (!tenantEmail || !propertyId) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Safely add metadata
+    // ✅ 1. Get price from database — never trust frontend
+    const propertyResult = await db.query(
+      "SELECT price FROM properties WHERE id = $1",
+      [propertyId]
+    );
+    const property = propertyResult.rows[0];
+    if (!property) {
+      return res.status(404).json({ error: "Property not found" });
+    }
+
+    const amount = property.price; // secure server-side value
+    if (!amount || amount <= 0) {
+      return res.status(400).json({ error: "Invalid property price" });
+    }
+
+    // ✅ 2. Add metadata
     const metadata = {};
     if (reservationId) metadata.reservationId = reservationId.toString();
 
+    // ✅ 3. Create Stripe checkout session with trusted amount
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       customer_email: tenantEmail,
@@ -473,7 +485,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
             product_data: {
               name: `Reservation Payment for Property #${propertyId}`,
             },
-            unit_amount: Math.round(amount * 100), // Stripe requires amount in cents
+            unit_amount: Math.round(amount * 100), // Stripe wants cents
           },
           quantity: 1,
         },
@@ -489,6 +501,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
     return res.status(500).json({ error: "Payment session failed" });
   }
 });
+
 // ✅ Get single property by ID
 app.get('/api/properties/:id', async (req, res) => {
   const { id } = req.params;
