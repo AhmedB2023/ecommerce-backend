@@ -465,6 +465,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
     }
 
     const amount = property.price; // secure server-side value
+    console.log("✅ Charging property", propertyId, "for", amount, "USD (from DB)");
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: "Invalid property price" });
     }
