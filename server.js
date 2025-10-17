@@ -445,36 +445,67 @@ app.get('/api/properties/:id/images', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
-// ✅ Create Checkout Session (secure)
+// ✅ Create Checkout Session (secure & single-winner)
 app.post("/api/create-checkout-session", async (req, res) => {
   try {
     const { propertyId, tenantEmail, reservationId } = req.body;
 
-    if (!tenantEmail || !propertyId) {
-      return res.status(400).json({ error: "Missing required fields" });
+    // Basic validation
+    if (!tenantEmail || !propertyId || !reservationId) {
+      return res.status(400).json({
+        error: "Missing required fields (propertyId, reservationId, tenantEmail)",
+      });
     }
 
-    // ✅ 1. Get price from database — never trust frontend
-    const propertyResult = await db.query(
-      "SELECT price FROM properties WHERE id = $1",
-      [propertyId]
+    // ✅ 1. Check property availability and reservation status
+    const resCheck = await db.query(
+      `SELECT 
+         p.is_active, 
+         p.price, 
+         r.status AS reservation_status, 
+         r.property_id 
+       FROM properties p
+       LEFT JOIN reservations r ON r.id = $2
+       WHERE p.id = $1`,
+      [propertyId, reservationId]
     );
-    const property = propertyResult.rows[0];
-    if (!property) {
-      return res.status(404).json({ error: "Property not found" });
+
+    const row = resCheck.rows[0];
+    if (!row) {
+      return res.status(404).json({ error: "Property or reservation not found" });
     }
 
-    const amount = property.price; // secure server-side value
-    console.log("✅ Charging property", propertyId, "for", amount, "USD (from DB)");
+    // ✅ Property must still be available
+    if (!row.is_active) {
+      return res.status(400).json({ error: "This property is no longer available." });
+    }
+
+    // ✅ Reservation must be ready for payment
+    // (adjust "id_uploaded" if you use a slightly different status name)
+    if (row.reservation_status !== "id_uploaded") {
+      return res.status(400).json({
+        error: "This reservation is not ready for payment or has already been processed.",
+      });
+    }
+
+    // ✅ 2. Use price from DB
+    const amount = row.price;
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: "Invalid property price" });
     }
 
-    // ✅ 2. Add metadata
-    const metadata = {};
-    if (reservationId) metadata.reservationId = reservationId.toString();
+    console.log(
+      "✅ Charging property",
+      propertyId,
+      "for",
+      amount,
+      "USD (from DB)"
+    );
 
-    // ✅ 3. Create Stripe checkout session with trusted amount
+    // ✅ 3. Add metadata for webhook tracking
+    const metadata = { reservationId: reservationId.toString() };
+
+    // ✅ 4. Create Stripe checkout session with verified amount
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       customer_email: tenantEmail,
@@ -486,7 +517,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
             product_data: {
               name: `Reservation Payment for Property #${propertyId}`,
             },
-            unit_amount: Math.round(amount * 100), // Stripe wants cents
+            unit_amount: Math.round(amount * 100), // Stripe requires cents
           },
           quantity: 1,
         },
@@ -496,6 +527,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
       cancel_url: `${process.env.APP_BASE_URL}/payment-cancel`,
     });
 
+    // ✅ Return session link
     return res.json({ id: session.id, url: session.url });
   } catch (error) {
     console.error("❌ Stripe error:", error.message);
