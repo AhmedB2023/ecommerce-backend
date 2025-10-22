@@ -69,7 +69,6 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // ✅ Handle successful checkout session
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
     const reservationId = session.metadata?.reservationId;
@@ -80,25 +79,29 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
     }
 
     try {
-      // 1️⃣ Update reservation status to 'accepted'
-      console.log("🔍 reservationId from Stripe metadata:", reservationId);
-
+      // 1️⃣ Update this reservation to 'paid'
       const result = await db.query(
-        "UPDATE reservations SET status = 'accepted' WHERE id = $1 RETURNING *",
+        "UPDATE reservations SET status = 'paid' WHERE id = $1 RETURNING *",
         [reservationId]
       );
       const reservation = result.rows[0];
       if (!reservation) return res.status(404).send("Reservation not found");
 
-      // 2️⃣ Reject only PENDING reservations for this property (leave accepted_pending_verification untouched)
-await db.query(
-  "UPDATE reservations SET status = 'rejected' WHERE property_id = $1 AND id <> $2 AND status = 'pending'",
-  [reservation.property_id, reservation.id]
-);
+      // ⭐ 2️⃣ Mark property as unavailable (no more reservations allowed)
+      await db.query(
+        "UPDATE properties SET is_active = false WHERE id = $1",
+        [reservation.property_id]
+      );
 
-      console.log(`🔁 Rejected other reservations for property ${reservation.property_id}`);
+      // ⭐ 3️⃣ Reject ALL OTHER reservations (except the paid one), no matter the status
+      await db.query(
+        "UPDATE reservations SET status = 'rejected' WHERE property_id = $1 AND id <> $2 AND status NOT IN ('rejected', 'paid')",
+        [reservation.property_id, reservation.id]
+      );
 
-      // 3️⃣ Fetch landlord and tenant emails
+      console.log(`🔁 Rejected all other reservations for property ${reservation.property_id}`);
+
+      // 4️⃣ Fetch landlord and tenant emails
       const landlordRes = await db.query("SELECT email FROM users WHERE id = $1", [reservation.landlord_id]);
       const landlordEmail = landlordRes.rows[0]?.email;
       const tenantEmail = reservation.guest_contact;
@@ -106,7 +109,7 @@ await db.query(
       const sender = { name: "Tajer", email: "support@tajernow.com" };
       const emailPromises = [];
 
-      // 4️⃣ Send confirmation email to tenant
+      // 5️⃣ Send confirmation email to tenant
       if (tenantEmail?.includes("@")) {
         emailPromises.push(
           tranEmailApi.sendTransacEmail({
@@ -122,7 +125,7 @@ await db.query(
         );
       }
 
-      // 5️⃣ Send notification email to landlord
+      // 6️⃣ Send notification email to landlord
       if (landlordEmail) {
         emailPromises.push(
           tranEmailApi.sendTransacEmail({
@@ -138,7 +141,7 @@ await db.query(
         );
       }
 
-      // 6️⃣ Send rejection emails to other tenants
+      // 7️⃣ Send rejection emails to all other tenants
       const rejectedRes = await db.query(
         "SELECT guest_contact FROM reservations WHERE property_id = $1 AND id != $2 AND status = 'rejected'",
         [reservation.property_id, reservation.id]
@@ -161,7 +164,7 @@ await db.query(
         }
       }
 
-      // 7️⃣ Send all emails concurrently
+      // 8️⃣ Send all emails concurrently
       await Promise.all(emailPromises);
       console.log("✅ Emails sent to accepted tenant, landlord, and rejected tenants.");
 
