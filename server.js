@@ -507,10 +507,11 @@ app.post("/api/create-checkout-session", async (req, res) => {
     }
 
     // 4️⃣ Use price from DB and calculate service fee and total (secure)
-    const propertyPrice = row.price;
-    if (!propertyPrice || propertyPrice <= 0) {
-      return res.status(400).json({ error: "Invalid property price" });
-    }
+   const propertyPrice = Number(row.price);  // <-- Always convert to Number!
+if (!propertyPrice || propertyPrice <= 0) {
+  return res.status(400).json({ error: "Invalid property price" });
+}
+
 
     // Calculate service fee (5%) and total (round to 2 decimals)
     const serviceFee = Math.round(propertyPrice * 0.05 * 100) / 100;
