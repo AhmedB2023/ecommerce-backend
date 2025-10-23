@@ -79,12 +79,22 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
     }
 
     try {
-      // 1️⃣ Update this reservation to 'paid'
-      const result = await db.query(
-        "UPDATE reservations SET status = 'paid' WHERE id = $1 RETURNING *",
-        [reservationId]
-      );
-      const reservation = result.rows[0];
+    // Extract values from metadata and session
+const propertyPrice = session.metadata?.propertyPrice ? Number(session.metadata.propertyPrice) : null;
+const serviceFee = session.metadata?.serviceFee ? Number(session.metadata.serviceFee) : null;
+const totalPaid = session.amount_total ? session.amount_total / 100 : null; // Stripe gives cents
+
+const result = await db.query(
+  `UPDATE reservations
+   SET status = 'paid',
+       property_price = $2,
+       service_fee = $3,
+       total_paid = $4
+   WHERE id = $1
+   RETURNING *`,
+  [reservationId, propertyPrice, serviceFee, totalPaid]
+);
+ reservation = result.rows[0];
       if (!reservation) return res.status(404).send("Reservation not found");
 
       // ⭐ 2️⃣ Mark property as unavailable (no more reservations allowed)
@@ -448,7 +458,7 @@ app.get('/api/properties/:id/images', async (req, res) => {
     res.status(500).send('Server error');
   }
 });
-// ✅ Create Checkout Session (secure & single-winner)
+// ✅ Create Checkout Session (secure & with 5% service fee)
 app.post("/api/create-checkout-session", async (req, res) => {
   try {
     const { propertyId, tenantEmail, reservationId } = req.body;
@@ -496,24 +506,36 @@ app.post("/api/create-checkout-session", async (req, res) => {
       });
     }
 
-    // 4️⃣ Use price from DB
-    const amount = row.price;
-    if (!amount || amount <= 0) {
+    // 4️⃣ Use price from DB and calculate service fee and total (secure)
+    const propertyPrice = row.price;
+    if (!propertyPrice || propertyPrice <= 0) {
       return res.status(400).json({ error: "Invalid property price" });
     }
+
+    // Calculate service fee (5%) and total (round to 2 decimals)
+    const serviceFee = Math.round(propertyPrice * 0.05 * 100) / 100;
+    const total = Math.round((propertyPrice + serviceFee) * 100) / 100;
 
     console.log(
       "✅ Charging property",
       propertyId,
       "for",
-      amount,
-      "USD (from DB)"
+      total,
+      "USD (price:",
+      propertyPrice,
+      "| fee:",
+      serviceFee,
+      ")"
     );
 
     // 5️⃣ Add metadata for webhook tracking
-    const metadata = { reservationId: reservationId.toString() };
+    const metadata = { 
+      reservationId: reservationId.toString(),
+      propertyPrice: propertyPrice.toString(),
+      serviceFee: serviceFee.toString()
+    };
 
-    // 6️⃣ Create Stripe checkout session with verified amount
+    // 6️⃣ Create Stripe checkout session with secure, verified total amount
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       customer_email: tenantEmail,
@@ -525,7 +547,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
             product_data: {
               name: `Reservation Payment for Property #${propertyId}`,
             },
-            unit_amount: Math.round(amount * 100), // Stripe requires cents
+            unit_amount: Math.round(total * 100), // Stripe requires cents
           },
           quantity: 1,
         },
@@ -542,6 +564,7 @@ app.post("/api/create-checkout-session", async (req, res) => {
     return res.status(500).json({ error: "Payment session failed" });
   }
 });
+
 
 
 // ✅ Get single property by ID
