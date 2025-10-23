@@ -540,7 +540,11 @@ if (!propertyPrice || propertyPrice <= 0) {
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       customer_email: tenantEmail,
-      metadata,
+       metadata: {
+    reservationId: reservationId.toString(),
+    propertyPrice: propertyPrice.toString(),  // <-- Add this
+    serviceFee: serviceFee.toString()         // <-- Add this
+  },
       line_items: [
         {
           price_data: {
