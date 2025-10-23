@@ -460,38 +460,43 @@ app.post("/api/create-checkout-session", async (req, res) => {
       });
     }
 
-    // ✅ 1. Check property availability and reservation status
-    const resCheck = await db.query(
+    // 1️⃣ Query property/reservation details (including ID upload field)
+    const result = await db.query(
       `SELECT 
          p.is_active, 
          p.price, 
          r.status AS reservation_status, 
-         r.property_id 
+         r.property_id,
+         r.id_front_url
        FROM properties p
        LEFT JOIN reservations r ON r.id = $2
        WHERE p.id = $1`,
       [propertyId, reservationId]
     );
 
-    const row = resCheck.rows[0];
+    const row = result.rows[0];
     if (!row) {
       return res.status(404).json({ error: "Property or reservation not found" });
     }
 
-    // ✅ Property must still be available
+    // 2️⃣ Property must be available
     if (!row.is_active) {
       return res.status(400).json({ error: "This property is no longer available." });
     }
 
-    // ✅ Reservation must be ready for payment
-    // (adjust "id_uploaded" if you use a slightly different status name)
-    if (row.reservation_status !== "id_uploaded") {
+    // 3️⃣ Only allow payment if:
+    //   - Reservation status is 'accepted_pending_verification'
+    //   - AND ID has been uploaded
+    if (
+      row.reservation_status !== "accepted_pending_verification" ||
+      !row.id_front_url
+    ) {
       return res.status(400).json({
         error: "This reservation is not ready for payment or has already been processed.",
       });
     }
 
-    // ✅ 2. Use price from DB
+    // 4️⃣ Use price from DB
     const amount = row.price;
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: "Invalid property price" });
@@ -505,10 +510,10 @@ app.post("/api/create-checkout-session", async (req, res) => {
       "USD (from DB)"
     );
 
-    // ✅ 3. Add metadata for webhook tracking
+    // 5️⃣ Add metadata for webhook tracking
     const metadata = { reservationId: reservationId.toString() };
 
-    // ✅ 4. Create Stripe checkout session with verified amount
+    // 6️⃣ Create Stripe checkout session with verified amount
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ["card"],
       customer_email: tenantEmail,
@@ -530,13 +535,14 @@ app.post("/api/create-checkout-session", async (req, res) => {
       cancel_url: `${process.env.APP_BASE_URL}/payment-cancel`,
     });
 
-    // ✅ Return session link
+    // 7️⃣ Return session link
     return res.json({ id: session.id, url: session.url });
   } catch (error) {
     console.error("❌ Stripe error:", error.message);
     return res.status(500).json({ error: "Payment session failed" });
   }
 });
+
 
 // ✅ Get single property by ID
 app.get('/api/properties/:id', async (req, res) => {
