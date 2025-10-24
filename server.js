@@ -1187,6 +1187,41 @@ app.post('/api/forgot-password', async (req, res) => {
   }
 });
 
+// GET /api/hosts/:slug
+app.get("/api/hosts/:slug", async (req, res) => {
+  const { slug } = req.params;
+
+  try {
+    // 1️⃣ Get the host by slug
+    const hostResult = await pool.query(
+      "SELECT id, username, email, role FROM users WHERE slug = $1 AND role = 'landlord'",
+      [slug]
+    );
+
+    if (hostResult.rows.length === 0) {
+      return res.status(404).json({ error: "Host not found" });
+    }
+
+    const host = hostResult.rows[0];
+
+    // 2️⃣ Get all properties by this host
+    const propertiesResult = await pool.query(
+      "SELECT * FROM properties WHERE landlord_id = $1",
+      [host.id]
+    );
+
+    // 3️⃣ Send both host info and properties
+    res.json({
+      host,
+      properties: propertiesResult.rows,
+    });
+  } catch (err) {
+    console.error("Error fetching host:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
+
 // ✅ Reset password
 app.post('/api/reset-password', async (req, res) => {
   const { token, newPassword } = req.body;
