@@ -1238,7 +1238,27 @@ app.post("/api/lead", async (req, res) => {
        RETURNING id`,
       [name, email, phone, propertyType, location]
     );
+     // ✅ Send Brevo email notification
+    const defaultClient = SibApiV3Sdk.ApiClient.instance;
+    const apiKey = defaultClient.authentications["api-key"];
+    apiKey.apiKey = process.env.BREVO_API_KEY;
 
+    const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+
+    sendSmtpEmail.subject = "🚀 New Tajer Hosting Lead";
+    sendSmtpEmail.to = [{ email: process.env.ADMIN_EMAIL }];
+    sendSmtpEmail.htmlContent = `
+      <h3>New Host Lead on Tajer</h3>
+      <p><strong>Name:</strong> ${name}</p>
+      <p><strong>Email:</strong> ${email}</p>
+      <p><strong>Phone:</strong> ${phone || "N/A"}</p>
+      <p><strong>Type:</strong> ${propertyType || "N/A"}</p>
+      <p><strong>Location:</strong> ${location || "N/A"}</p>
+    `;
+    sendSmtpEmail.sender = { email: "no-reply@tajer.com", name: "Tajer Leads" };
+
+    await tranEmailApi.sendTransacEmail(sendSmtpEmail);
     res.status(201).json({ message: "Lead saved", leadId: result.rows[0].id });
   } catch (err) {
     console.error("Error saving lead:", err);
