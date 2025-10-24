@@ -1238,7 +1238,7 @@ app.post("/api/lead", async (req, res) => {
        RETURNING id`,
       [name, email, phone, propertyType, location]
     );
-    console.log("BREVO_API_KEY loaded:", !!process.env.BREVO_API_KEY);
+   
 
      // ✅ Send Brevo email notification
     const defaultClient = SibApiV3Sdk.ApiClient.instance;
@@ -1258,7 +1258,8 @@ app.post("/api/lead", async (req, res) => {
       <p><strong>Type:</strong> ${propertyType || "N/A"}</p>
       <p><strong>Location:</strong> ${location || "N/A"}</p>
     `;
-    sendSmtpEmail.sender = { email: "no-reply@tajer.com", name: "Tajer Leads" };
+    sendSmtpEmail.sender = { email: "support@tajernow.com", name: "Tajer Leads" };
+
 
     await tranEmailApi.sendTransacEmail(sendSmtpEmail);
     res.status(201).json({ message: "Lead saved", leadId: result.rows[0].id });
