@@ -1221,6 +1221,31 @@ app.get("/api/hosts/:slug", async (req, res) => {
   }
 });
 
+// ✅ POST /api/lead
+app.post("/api/lead", async (req, res) => {
+  try {
+    const { name, email, phone, propertyType, location } = req.body;
+
+    // Basic validation
+    if (!name || !email) {
+      return res.status(400).json({ error: "Name and email are required." });
+    }
+
+    // Insert the lead into a new table
+    const result = await pool.query(
+      `INSERT INTO leads (name, email, phone, property_type, location)
+       VALUES ($1, $2, $3, $4, $5)
+       RETURNING id`,
+      [name, email, phone, propertyType, location]
+    );
+
+    res.status(201).json({ message: "Lead saved", leadId: result.rows[0].id });
+  } catch (err) {
+    console.error("Error saving lead:", err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
+
 
 // ✅ Reset password
 app.post('/api/reset-password', async (req, res) => {
