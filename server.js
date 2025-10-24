@@ -1238,6 +1238,8 @@ app.post("/api/lead", async (req, res) => {
        RETURNING id`,
       [name, email, phone, propertyType, location]
     );
+    console.log("BREVO_API_KEY loaded:", !!process.env.BREVO_API_KEY);
+
      // ✅ Send Brevo email notification
     const defaultClient = SibApiV3Sdk.ApiClient.instance;
     const apiKey = defaultClient.authentications["api-key"];
