@@ -1240,29 +1240,31 @@ app.post("/api/lead", async (req, res) => {
     );
    
 
-     // ✅ Send Brevo email notification
-    const defaultClient = SibApiV3Sdk.ApiClient.instance;
-    const apiKey = defaultClient.authentications["api-key"];
-    apiKey.apiKey = process.env.BREVO_API_KEY;
+   // ✅ Send Brevo email notification
+const defaultClient = SibApiV3Sdk.ApiClient.instance;
+const apiKey = defaultClient.authentications["api-key"];
+apiKey.apiKey = process.env.BREVO_API_KEY;
 
-    const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
-    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
 
-    sendSmtpEmail.subject = "🚀 New Tajer Hosting Lead";
-    sendSmtpEmail.to = [{ email: process.env.ADMIN_EMAIL }];
-    sendSmtpEmail.htmlContent = `
-      <h3>New Host Lead on Tajer</h3>
-      <p><strong>Name:</strong> ${name}</p>
-      <p><strong>Email:</strong> ${email}</p>
-      <p><strong>Phone:</strong> ${phone || "N/A"}</p>
-      <p><strong>Type:</strong> ${propertyType || "N/A"}</p>
-      <p><strong>Location:</strong> ${location || "N/A"}</p>
-    `;
-    sendSmtpEmail.sender = { email: "support@tajernow.com", name: "Tajer Leads" };
+// ✅ Make sure both sender and recipient are valid
+sendSmtpEmail.sender = { email: "support@tajernow.com", name: "Tajer Leads" };
+sendSmtpEmail.to = [{ email: process.env.ADMIN_EMAIL || "support@tajernow.com" }];
 
+sendSmtpEmail.subject = "🚀 New Tajer Hosting Lead";
+sendSmtpEmail.htmlContent = `
+  <h3>New Host Lead on Tajer</h3>
+  <p><strong>Name:</strong> ${name}</p>
+  <p><strong>Email:</strong> ${email}</p>
+  <p><strong>Phone:</strong> ${phone || "N/A"}</p>
+  <p><strong>Type of Space:</strong> ${propertyType || "N/A"}</p>
+  <p><strong>Location:</strong> ${location || "N/A"}</p>
+`;
 
-    await tranEmailApi.sendTransacEmail(sendSmtpEmail);
-    res.status(201).json({ message: "Lead saved", leadId: result.rows[0].id });
+await tranEmailApi.sendTransacEmail(sendSmtpEmail);
+res.status(201).json({ message: "Lead saved", leadId: result.rows[0].id });
+
   } catch (err) {
     console.error("Error saving lead:", err);
     res.status(500).json({ error: "Server error" });
