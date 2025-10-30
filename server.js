@@ -690,10 +690,14 @@ app.get('/api/search', async (req, res) => {
       });
     }
 
-    const withImages = properties.map(p => ({
-      ...p,
-      images: imageMap[p.id] || []
-    }));
+  const withImages = properties.map(p => {
+  const imageList = imageMap[p.id] || [];
+  return {
+    ...p,
+    image_url: imageList.length > 0 ? imageList[0] : null, // ✅ first image only
+    images: imageList, // keep the array in case you need it later
+  };
+});
 
     res.json(withImages);
   } catch (err) {
