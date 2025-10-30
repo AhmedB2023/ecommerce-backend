@@ -15,6 +15,7 @@
     "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.3",
     "bwip-js": "^4.5.1",
+    "cloudinary": "^2.8.0",
     "cors": "^2.8.5",
     "dotenv": "^17.0.1",
     "express": "^4.21.1",
