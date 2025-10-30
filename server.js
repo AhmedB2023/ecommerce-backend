@@ -1271,6 +1271,44 @@ res.status(201).json({ message: "Lead saved", leadId: result.rows[0].id });
   }
 });
 
+// 📩 CONTACT FORM ROUTE
+app.post("/api/contact", async (req, res) => {
+  try {
+    const { name, email, message } = req.body;
+    if (!name || !email || !message) {
+      return res.status(400).json({ error: "All fields are required" });
+    }
+
+    // Import Brevo SDK
+    const SibApiV3Sdk = require("sib-api-v3-sdk");
+    const defaultClient = SibApiV3Sdk.ApiClient.instance;
+    const apiKey = defaultClient.authentications["api-key"];
+    apiKey.apiKey = process.env.BREVO_API_KEY;
+
+    // Create Brevo instance
+    const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+
+    sendSmtpEmail.subject = `📬 New Contact Message from ${name}`;
+    sendSmtpEmail.to = [{ email: process.env.ADMIN_EMAIL }];
+    sendSmtpEmail.htmlContent = `
+      <h3>New Contact Message</h3>
+      <p><strong>Name:</strong> ${name}</p>
+      <p><strong>Email:</strong> ${email}</p>
+      <p><strong>Message:</strong></p>
+      <p>${message}</p>
+    `;
+    sendSmtpEmail.sender = { email: "support@tajernow.com", name: "Tajer Support" };
+
+    await tranEmailApi.sendTransacEmail(sendSmtpEmail);
+    res.json({ success: true, message: "Message sent successfully!" });
+  } catch (error) {
+    console.error("❌ Error sending contact email:", error);
+    res.status(500).json({ error: "Failed to send message" });
+  }
+});
+
+
 
 // ✅ Reset password
 app.post('/api/reset-password', async (req, res) => {
