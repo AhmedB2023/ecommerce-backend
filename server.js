@@ -1250,7 +1250,7 @@ const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
 
 // ✅ Make sure both sender and recipient are valid
 sendSmtpEmail.sender = { email: "support@tajernow.com", name: "Tajer Leads" };
-sendSmtpEmail.to = [{ email: process.env.ADMIN_EMAIL || "support@tajernow.com" }];
+sendSmtpEmail.to = [{ email: process.env.EMAIL_USER || "support@tajernow.com" }];
 
 sendSmtpEmail.subject = "🚀 New Tajer Hosting Lead";
 sendSmtpEmail.htmlContent = `
@@ -1290,7 +1290,7 @@ app.post("/api/contact", async (req, res) => {
     const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
 
     sendSmtpEmail.subject = `📬 New Contact Message from ${name}`;
-    sendSmtpEmail.to = [{ email: process.env.ADMIN_EMAIL }];
+    sendSmtpEmail.to = [{ email: process.env.EMAIL_USER }];
     sendSmtpEmail.htmlContent = `
       <h3>New Contact Message</h3>
       <p><strong>Name:</strong> ${name}</p>
