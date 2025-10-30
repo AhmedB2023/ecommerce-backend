@@ -5,6 +5,17 @@ const cors = require('cors');
 const path = require('path');
 // 🧳 File upload setup
 const multer = require('multer');
+
+
+// 🩵 Cloudinary setup
+const cloudinary = require('cloudinary').v2;
+
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET
+});
+
 // Stripe raw body middleware
 const bodyParser = require("body-parser");
 
@@ -406,15 +417,20 @@ await pool.query(
 );
 
 
-    // ✅ Save uploaded images to property_images table
-    for (const file of files) {
-      const imageUrl = `https://ecommerce-backend-y3v4.onrender.com/uploads/${file.filename}`;
-      await pool.query(
-        `INSERT INTO property_images (property_id, image_url)
-         VALUES ($1, $2)`,
-        [property.id, imageUrl]
-      );
-    }
+   // ✅ Upload images to Cloudinary instead of local uploads
+for (const file of files) {
+  const result = await cloudinary.uploader.upload(file.path, {
+    folder: "tajer_properties", // optional folder name on Cloudinary
+  });
+
+  const imageUrl = result.secure_url;
+
+  await pool.query(
+    `INSERT INTO property_images (property_id, image_url)
+     VALUES ($1, $2)`,
+    [property.id, imageUrl]
+  );
+}
 
     res.json({ message: '✅ Property added with full details and images', property });
   } catch (err) {
