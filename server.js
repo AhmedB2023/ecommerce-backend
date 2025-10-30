@@ -1251,6 +1251,7 @@ const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
 // ✅ Make sure both sender and recipient are valid
 sendSmtpEmail.sender = { email: "support@tajernow.com", name: "Tajer Leads" };
 sendSmtpEmail.to = [{ email: process.env.EMAIL_USER || "support@tajernow.com" }];
+sendSmtpEmail.replyTo = { email }; // user's email from the form
 
 sendSmtpEmail.subject = "🚀 New Tajer Hosting Lead";
 sendSmtpEmail.htmlContent = `
