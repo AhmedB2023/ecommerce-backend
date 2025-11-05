@@ -1350,6 +1350,18 @@ app.post("/api/repairs", async (req, res) => {
     res.status(500).json({ error: "Failed to create repair request" });
   }
 });
+// ✅ GET all open repair requests
+app.get("/api/repairs/open", async (req, res) => {
+  try {
+    const result = await pool.query(
+      "SELECT * FROM repair_requests WHERE status = 'open' ORDER BY created_at DESC"
+    );
+    res.json({ success: true, repairs: result.rows });
+  } catch (err) {
+    console.error("Error fetching open repairs:", err);
+    res.status(500).json({ error: "Failed to fetch open repair requests" });
+  }
+});
 
 
 // ✅ Reset password
