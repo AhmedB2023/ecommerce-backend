@@ -84,6 +84,19 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
   }
 
   if (event.type === "checkout.session.completed") {
+
+
+    const repairId = session.metadata?.repairId;
+if (repairId && session.metadata?.repairType === "repair_request") {
+  await pool.query(
+    `UPDATE repair_requests
+     SET status = 'paid'
+     WHERE id = $1`,
+    [repairId]
+  );
+  console.log(`✅ Repair request ${repairId} marked as paid.`);
+}
+
     const session = event.data.object;
     const reservationId = session.metadata?.reservationId;
 

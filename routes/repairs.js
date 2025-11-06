@@ -155,4 +155,59 @@ router.get("/:id/reject", async (req, res) => {
   }
 });
 
+const Stripe = require("stripe");
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
+// ✅ Accept quote and redirect to Stripe
+router.get("/payments/start/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1️⃣ Fetch repair details
+    const result = await pool.query(
+      `SELECT description, price_quote, requester_email 
+       FROM repair_requests 
+       WHERE id = $1`,
+      [id]
+    );
+    const repair = result.rows[0];
+    if (!repair) return res.status(404).send("Repair request not found.");
+
+    // 2️⃣ Update status before redirect
+    await pool.query(
+      `UPDATE repair_requests
+       SET status = 'accepted_pending_payment'
+       WHERE id = $1`,
+      [id]
+    );
+
+    // 3️⃣ Create Stripe Checkout session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      customer_email: repair.requester_email,
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: { name: `Repair: ${repair.description}` },
+            unit_amount: Math.round(repair.price_quote * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      mode: "payment",
+      success_url: `${process.env.APP_BASE_URL}/payment-success?repairId=${id}`,
+      cancel_url: `${process.env.APP_BASE_URL}/payment-cancelled`,
+      metadata: { repairId: id, repairType: "repair_request" },
+    });
+
+    // 4️⃣ Redirect to Stripe
+    res.redirect(session.url);
+  } catch (err) {
+    console.error("Error starting repair payment:", err.message);
+    res.status(500).send("Failed to start repair payment.");
+  }
+});
+
+
 module.exports = router;
