@@ -1,9 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../db");
-
 const sendRepairEmail = require("../utils/sendRepairEmail");
-
 
 // ✅ Create repair request
 router.post("/", async (req, res) => {
@@ -17,18 +15,17 @@ router.post("/", async (req, res) => {
        RETURNING *`,
       [description, image_urls || [], requester_email]
     );
-    if (requester_email) {
-  await sendRepairEmail(requester_email, description, image_urls);
-}
 
-  
+    if (requester_email) {
+      await sendRepairEmail(requester_email, description, image_urls);
+    }
+
     res.status(201).json({ success: true, repair: result.rows[0] });
   } catch (err) {
     console.error("Error creating repair request:", err);
     res.status(500).json({ error: "Failed to create repair request" });
   }
 });
-
 
 // ✅ Get all open requests
 router.get("/open", async (req, res) => {
@@ -80,15 +77,24 @@ router.post("/:id/quote", async (req, res) => {
 
     const repair = result.rows[0];
 
-    // 3️⃣ Notify requester with provider info (no email)
+    // 3️⃣ Notify requester with provider info (no email address)
     const requesterEmail = repair.requester_email;
     if (requesterEmail) {
-      const sendRepairEmail = require("../utils/sendRepairEmail");
       const providerDisplay = `${provider_first_name} ${provider_last_name} from ${provider_city}`;
-
       await sendRepairEmail(
         requesterEmail,
-        `Good news! ${providerDisplay} has submitted a quote of $${price_quote} for your repair request.`,
+        `
+        <p>Good news! ${providerDisplay} has submitted a quote of <strong>$${price_quote}</strong> for your repair request.</p>
+        <p>Please choose an option below:</p>
+        <a href="${process.env.API_URL}/api/repairs/${id}/accept"
+           style="background-color:#28a745;color:white;padding:10px 16px;border-radius:6px;text-decoration:none;margin-right:10px;">
+           ✅ Accept Quote
+        </a>
+        <a href="${process.env.API_URL}/api/repairs/${id}/reject"
+           style="background-color:#dc3545;color:white;padding:10px 16px;border-radius:6px;text-decoration:none;">
+           ❌ Reject Quote
+        </a>
+        `,
         repair.image_urls || []
       );
       console.log(`✅ Quote email sent to ${requesterEmail}`);
@@ -101,11 +107,8 @@ router.post("/:id/quote", async (req, res) => {
   }
 });
 
-
-
-
 // ✅ Requester accepts quote
-router.put("/:id/accept", async (req, res) => {
+router.get("/:id/accept", async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -118,63 +121,36 @@ router.put("/:id/accept", async (req, res) => {
     );
 
     if (result.rows.length === 0)
-      return res.status(404).json({ error: "Repair request not found" });
+      return res.status(404).send("Repair request not found.");
 
-    res.json({ success: true, repair: result.rows[0] });
+    res.send(`<h2>✅ Quote Accepted</h2><p>Thank you! The provider will be notified.</p>`);
   } catch (err) {
     console.error("Error accepting quote:", err);
-    res.status(500).json({ error: "Failed to accept quote" });
+    res.status(500).send("Error accepting quote.");
   }
 });
-router.put("/:id/quote", async (req, res) => {
-  const { id } = req.params;
-  const { provider_email, price_quote } = req.body;
 
+// ✅ Requester rejects quote
+router.get("/:id/reject", async (req, res) => {
   try {
+    const { id } = req.params;
+
     const result = await pool.query(
       `UPDATE repair_requests
-       SET provider_email = $1, price_quote = $2, status = 'quoted'
-       WHERE id = $3
+       SET status = 'rejected'
+       WHERE id = $1
        RETURNING *`,
-      [provider_email, price_quote, id]
+      [id]
     );
 
-    if (result.rowCount === 0) {
-      return res.status(404).json({ success: false, message: "Repair not found" });
-    }
- const repair = result.rows[0];
+    if (result.rows.length === 0)
+      return res.status(404).send("Repair request not found.");
 
-    // ✅ Step 1 — Send Brevo email to requester (without provider email)
-    if (repair.requester_email) {
-      try {
-        await sendBrevoEmail({
-          to: repair.requester_email,
-          subject: "You received a new quote for your repair request!",
-          htmlContent: `
-            <h3>Hello!</h3>
-            <p>A service provider has submitted a quote for your request.</p>
-            <p>Quoted price: <b>$${price_quote}</b></p>
-            <p>Please visit 
-              <a href="https://tajernow.com/repair-status/${id}" 
-                 style="background:#007bff;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">
-                 Review and Respond
-              </a>
-            </p>
-            <p>Thank you for using Tajer!</p>
-          `
-        });
-        console.log("📧 Email sent to requester:", repair.requester_email);
-      } catch (emailErr) {
-        console.error("Error sending Brevo email:", emailErr);
-      }
-    }
-
-    res.json({ success: true, repair: result.rows[0] });
+    res.send(`<h2>❌ Quote Rejected</h2><p>The provider will be notified.</p>`);
   } catch (err) {
-    console.error("Error updating repair quote:", err);
-    res.status(500).json({ success: false, error: err.message });
+    console.error("Error rejecting quote:", err);
+    res.status(500).send("Error rejecting quote.");
   }
 });
-
 
 module.exports = router;
