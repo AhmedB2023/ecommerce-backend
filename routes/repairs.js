@@ -5,21 +5,23 @@ const pool = require("../db");
 // ✅ Create repair request
 router.post("/", async (req, res) => {
   try {
-    const { property_id, requester_id, description, image_urls } = req.body;
+    const { description, image_urls, requester_email } = req.body;
     if (!description) return res.status(400).json({ error: "Description is required" });
 
     const result = await pool.query(
-      `INSERT INTO repair_requests (description, image_urls,requester_email)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO repair_requests (description, image_urls, requester_email, status)
+       VALUES ($1, $2, $3, 'open')
        RETURNING *`,
-      [property_id || null, requester_id || null, description, image_urls || []]
+      [description, image_urls || [], requester_email]
     );
+
     res.status(201).json({ success: true, repair: result.rows[0] });
   } catch (err) {
     console.error("Error creating repair request:", err);
     res.status(500).json({ error: "Failed to create repair request" });
   }
 });
+
 
 // ✅ Get all open requests
 router.get("/open", async (req, res) => {
