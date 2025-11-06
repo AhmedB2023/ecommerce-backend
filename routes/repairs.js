@@ -202,8 +202,10 @@ router.get("/payments/start/:id", async (req, res) => {
         },
       ],
       mode: "payment",
-      success_url: `${process.env.APP_BASE_URL}/payment-success?repairId=${id}`,
-      cancel_url: `${process.env.APP_BASE_URL}/payment-cancelled`,
+          success_url: `https://tajernow.com/payment-success?repairId=${id}`,
+          cancel_url: `https://tajernow.com/payment-cancelled`,
+
+
       metadata: { repairId: id, repairType: "repair_request" },
     });
 
