@@ -65,6 +65,8 @@ router.post("/:id/quote", async (req, res) => {
        RETURNING *`,
       [provider_email, provider_first_name, provider_last_name, provider_city, price_quote, id]
     );
+    console.log("✅ Repair record updated:", result.rows[0]);
+
 
     if (result.rows.length === 0)
       return res.status(404).json({ error: "Repair request not found" });
