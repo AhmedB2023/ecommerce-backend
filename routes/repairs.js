@@ -206,6 +206,9 @@ router.get("/payments/start/:id", async (req, res) => {
       metadata: { repairId: id, repairType: "repair_request" },
     });
 
+    // 👇 Add this console log to confirm Stripe URL
+    console.log("💳 Stripe session created:", session.url);
+
     // 4️⃣ Redirect to Stripe
     res.redirect(session.url);
   } catch (err) {
