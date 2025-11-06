@@ -14,7 +14,19 @@ router.post("/", async (req, res) => {
        RETURNING *`,
       [description, image_urls || [], requester_email]
     );
+   const repair = result.rows[0];
 
+    // ✅ Send Brevo confirmation email here
+    if (requester_email) {
+      try {
+        await sendResetEmail(
+          requester_email,
+          "Thank you for submitting your repair request. Our service providers will review it shortly."
+        );
+      } catch (emailErr) {
+        console.error("❌ Failed to send confirmation email:", emailErr.message);
+      }
+    }
     res.status(201).json({ success: true, repair: result.rows[0] });
   } catch (err) {
     console.error("Error creating repair request:", err);
