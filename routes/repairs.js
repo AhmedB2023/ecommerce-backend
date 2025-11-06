@@ -52,24 +52,18 @@ router.post("/:id/quote", async (req, res) => {
       price_quote,
     } = req.body;
 
-    // 1️⃣ Get provider_id from email
-    const providerRes = await pool.query(
-      `SELECT id FROM users WHERE email = $1`,
-      [provider_email]
-    );
-    const provider_id = providerRes.rows[0]?.id;
-    if (!provider_id)
-      return res.status(400).json({ error: "Provider not found" });
-
-    // 2️⃣ Update repair request
+    // ✅ Just store provider info directly in the repair request
     const result = await pool.query(
       `UPDATE repair_requests
-       SET selected_provider_id = $1,
-           price_quote = $2,
+       SET provider_email = $1,
+           provider_first_name = $2,
+           provider_last_name = $3,
+           provider_city = $4,
+           price_quote = $5,
            status = 'quoted'
-       WHERE id = $3
+       WHERE id = $6
        RETURNING *`,
-      [provider_id, price_quote, id]
+      [provider_email, provider_first_name, provider_last_name, provider_city, price_quote, id]
     );
 
     if (result.rows.length === 0)
@@ -77,35 +71,35 @@ router.post("/:id/quote", async (req, res) => {
 
     const repair = result.rows[0];
 
-    // 3️⃣ Notify requester with provider info (no email address)
+    // ✅ Notify requester with provider info (no email address)
     const requesterEmail = repair.requester_email;
     if (requesterEmail) {
       const providerDisplay = `${provider_first_name} ${provider_last_name} from ${provider_city}`;
+
       await sendRepairEmail(
-  requesterEmail,
-  `
-  <p>Good news! ${providerDisplay} has submitted a quote of 
-  <strong>$${price_quote}</strong> for your repair request.</p>
+        requesterEmail,
+        `
+        <p>Good news! ${providerDisplay} has submitted a quote of 
+        <strong>$${price_quote}</strong> for your repair request.</p>
 
-  <p><em>You won’t be charged until you mark your repair as completed after the provider finishes the job.</em></p>
+        <p><em>You won’t be charged until you mark your repair as completed after the provider finishes the job.</em></p>
 
-  <p>Please choose an option below:</p>
+        <p>Please choose an option below:</p>
 
-  <a href="${process.env.APP_BASE_URL}/checkout/${id}"
-     style="background-color:#28a745;color:white;padding:10px 16px;
-     border-radius:6px;text-decoration:none;margin-right:10px;">
-     ✅ Accept Quote & Proceed to Payment
-  </a>
+        <a href="${process.env.APP_BASE_URL}/checkout/${id}"
+           style="background-color:#28a745;color:white;padding:10px 16px;
+           border-radius:6px;text-decoration:none;margin-right:10px;">
+           ✅ Accept Quote & Proceed to Payment
+        </a>
 
-  <a href="${process.env.APP_BASE_URL}/api/repairs/${id}/reject"
-     style="background-color:#dc3545;color:white;padding:10px 16px;
-     border-radius:6px;text-decoration:none;">
-     ❌ Reject Quote
-  </a>
-  `,
-  repair.image_urls || []
-);
-
+        <a href="${process.env.APP_BASE_URL}/api/repairs/${id}/reject"
+           style="background-color:#dc3545;color:white;padding:10px 16px;
+           border-radius:6px;text-decoration:none;">
+           ❌ Reject Quote
+        </a>
+        `,
+        repair.image_urls || []
+      );
 
       console.log(`✅ Quote email sent to ${requesterEmail}`);
     }
@@ -116,6 +110,7 @@ router.post("/:id/quote", async (req, res) => {
     res.status(500).json({ error: "Failed to submit quote" });
   }
 });
+
 
 // ✅ Requester accepts quote
 router.get("/:id/accept", async (req, res) => {
