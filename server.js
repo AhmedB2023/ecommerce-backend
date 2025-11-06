@@ -53,6 +53,9 @@ app.use(express.json());
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 
+// ✅ Repair routes
+const repairRoutes = require("./routes/repairs");
+app.use("/api/repairs", repairRoutes);
 
 
 
@@ -1329,70 +1332,9 @@ app.post("/api/contact", async (req, res) => {
   }
 });
 
-app.post("/api/repairs", async (req, res) => {
-  try {
-    const { property_id, requester_id, description, image_urls } = req.body;
 
-    if (!description) {
-      return res.status(400).json({ error: "Description is required" });
-    }
 
-    const result = await pool.query(
-      `INSERT INTO repair_requests (property_id, requester_id, description, image_urls)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [property_id || null, requester_id || null, description, image_urls || []]
-    );
 
-    res.status(201).json({ success: true, repair: result.rows[0] });
-  } catch (err) {
-    console.error("Error creating repair request:", err);
-    res.status(500).json({ error: "Failed to create repair request" });
-  }
-});
-// ✅ GET all open repair requests
-app.get("/api/repairs/open", async (req, res) => {
-  try {
-    const result = await pool.query(
-      "SELECT * FROM repair_requests WHERE status = 'open' ORDER BY created_at DESC"
-    );
-    res.json({ success: true, repairs: result.rows });
-  } catch (err) {
-    console.error("Error fetching open repairs:", err);
-    res.status(500).json({ error: "Failed to fetch open repair requests" });
-  }
-});
-
-// ✅ POST /api/repairs/:id/quote  → provider sends a price quote
-app.post("/api/repairs/:id/quote", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { provider_id, price_quote } = req.body;
-
-    if (!provider_id || !price_quote) {
-      return res.status(400).json({ error: "provider_id and price_quote are required" });
-    }
-
-    const result = await pool.query(
-      `UPDATE repair_requests
-       SET selected_provider_id = $1,
-           price_quote = $2,
-           status = 'quoted'
-       WHERE id = $3
-       RETURNING *`,
-      [provider_id, price_quote, id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Repair request not found" });
-    }
-
-    res.json({ success: true, repair: result.rows[0] });
-  } catch (err) {
-    console.error("Error submitting quote:", err);
-    res.status(500).json({ error: "Failed to submit quote" });
-  }
-});
 
 
 // ✅ Reset password
