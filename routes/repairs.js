@@ -48,6 +48,7 @@ router.post("/:id/quote", async (req, res) => {
   try {
     const { id } = req.params;
     const { provider_id, price_quote } = req.body;
+
     if (!provider_id || !price_quote)
       return res.status(400).json({ error: "provider_id and price_quote are required" });
 
@@ -64,12 +65,34 @@ router.post("/:id/quote", async (req, res) => {
     if (result.rows.length === 0)
       return res.status(404).json({ error: "Repair request not found" });
 
-    res.json({ success: true, repair: result.rows[0] });
+    const repair = result.rows[0];
+
+    // ✅ Fetch requester email
+    const requesterResult = await pool.query(
+      `SELECT requester_email FROM repair_requests WHERE id = $1`,
+      [id]
+    );
+    const requesterEmail = requesterResult.rows[0]?.requester_email;
+
+    // ✅ Notify requester via Brevo
+    if (requesterEmail) {
+      const sendRepairEmail = require("../utils/sendRepairEmail");
+
+      await sendRepairEmail(
+        requesterEmail,
+        `Good news! A provider has submitted a quote of $${price_quote} for your repair request.`,
+        repair.image_urls || []
+      );
+      console.log(`✅ Quote email sent to ${requesterEmail}`);
+    }
+
+    res.json({ success: true, repair });
   } catch (err) {
     console.error("Error submitting quote:", err);
     res.status(500).json({ error: "Failed to submit quote" });
   }
 });
+
 
 // ✅ Requester accepts quote
 router.put("/:id/accept", async (req, res) => {
