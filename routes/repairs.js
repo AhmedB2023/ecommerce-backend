@@ -84,5 +84,29 @@ router.put("/:id/accept", async (req, res) => {
     res.status(500).json({ error: "Failed to accept quote" });
   }
 });
+router.put("/:id/quote", async (req, res) => {
+  const { id } = req.params;
+  const { provider_email, price_quote } = req.body;
+
+  try {
+    const result = await pool.query(
+      `UPDATE repair_requests
+       SET provider_email = $1, price_quote = $2, status = 'quoted'
+       WHERE id = $3
+       RETURNING *`,
+      [provider_email, price_quote, id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: "Repair not found" });
+    }
+
+    res.json({ success: true, repair: result.rows[0] });
+  } catch (err) {
+    console.error("Error updating repair quote:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 
 module.exports = router;
