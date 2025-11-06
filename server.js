@@ -3,7 +3,7 @@ const express = require('express');
 const app = express(); // ✅ MISSING BEFORE
 const cors = require('cors');
 const path = require('path');
-const paymentRoutes = require("./routes/payments");
+const repairRoutes = require("./routes/repairs");
 
 // 🧳 File upload setup
 const multer = require('multer');
@@ -58,7 +58,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // ✅ Repair routes
 const repairRoutes = require("./routes/repairs");
 app.use("/api/repairs", repairRoutes);
-app.use("/api/payments", paymentRoutes);
+
 
 
 
