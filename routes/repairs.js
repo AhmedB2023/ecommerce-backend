@@ -47,11 +47,18 @@ router.get("/open", async (req, res) => {
 router.post("/:id/quote", async (req, res) => {
   try {
     const { id } = req.params;
-    const { provider_id, price_quote } = req.body;
+    const { provider_email, price_quote } = req.body;
 
-    if (!provider_id || !price_quote)
-      return res.status(400).json({ error: "provider_id and price_quote are required" });
+    // 1️⃣ Get provider_id from email
+    const providerRes = await pool.query(
+      `SELECT id FROM users WHERE email = $1`,
+      [provider_email]
+    );
+    const provider_id = providerRes.rows[0]?.id;
+    if (!provider_id)
+      return res.status(400).json({ error: "Provider not found" });
 
+    // 2️⃣ Update repair request
     const result = await pool.query(
       `UPDATE repair_requests
        SET selected_provider_id = $1,
@@ -67,20 +74,14 @@ router.post("/:id/quote", async (req, res) => {
 
     const repair = result.rows[0];
 
-    // ✅ Fetch requester email
-    const requesterResult = await pool.query(
-      `SELECT requester_email FROM repair_requests WHERE id = $1`,
-      [id]
-    );
-    const requesterEmail = requesterResult.rows[0]?.requester_email;
+    // 3️⃣ Notify requester (use existing requester_email)
+    const requesterEmail = repair.requester_email;
 
-    // ✅ Notify requester via Brevo
     if (requesterEmail) {
       const sendRepairEmail = require("../utils/sendRepairEmail");
-
       await sendRepairEmail(
         requesterEmail,
-        `Good news! A provider has submitted a quote of $${price_quote} for your repair request.`,
+        `Good news! ${provider_email} submitted a quote of $${price_quote} for your repair request.`,
         repair.image_urls || []
       );
       console.log(`✅ Quote email sent to ${requesterEmail}`);
@@ -92,6 +93,7 @@ router.post("/:id/quote", async (req, res) => {
     res.status(500).json({ error: "Failed to submit quote" });
   }
 });
+
 
 
 // ✅ Requester accepts quote
