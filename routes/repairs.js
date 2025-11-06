@@ -167,6 +167,11 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 router.get("/payments/start/:id", async (req, res) => {
   try {
     const { id } = req.params;
+    router.get("/payments/start/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log("🚀 /payments/start called with ID:", id);
+
 
     // 1️⃣ Fetch repair details
     const result = await pool.query(
