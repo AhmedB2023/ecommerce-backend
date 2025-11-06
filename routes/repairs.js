@@ -100,6 +100,32 @@ router.put("/:id/quote", async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ success: false, message: "Repair not found" });
     }
+ const repair = result.rows[0];
+
+    // ✅ Step 1 — Send Brevo email to requester (without provider email)
+    if (repair.requester_email) {
+      try {
+        await sendBrevoEmail({
+          to: repair.requester_email,
+          subject: "You received a new quote for your repair request!",
+          htmlContent: `
+            <h3>Hello!</h3>
+            <p>A service provider has submitted a quote for your request.</p>
+            <p>Quoted price: <b>$${price_quote}</b></p>
+            <p>Please visit 
+              <a href="https://tajernow.com/repair-status/${id}" 
+                 style="background:#007bff;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;">
+                 Review and Respond
+              </a>
+            </p>
+            <p>Thank you for using Tajer!</p>
+          `
+        });
+        console.log("📧 Email sent to requester:", repair.requester_email);
+      } catch (emailErr) {
+        console.error("Error sending Brevo email:", emailErr);
+      }
+    }
 
     res.json({ success: true, repair: result.rows[0] });
   } catch (err) {
