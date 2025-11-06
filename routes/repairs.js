@@ -47,7 +47,13 @@ router.get("/open", async (req, res) => {
 router.post("/:id/quote", async (req, res) => {
   try {
     const { id } = req.params;
-    const { provider_email, price_quote } = req.body;
+    const {
+      provider_email,
+      provider_first_name,
+      provider_last_name,
+      provider_city,
+      price_quote,
+    } = req.body;
 
     // 1️⃣ Get provider_id from email
     const providerRes = await pool.query(
@@ -74,14 +80,15 @@ router.post("/:id/quote", async (req, res) => {
 
     const repair = result.rows[0];
 
-    // 3️⃣ Notify requester (use existing requester_email)
+    // 3️⃣ Notify requester with provider info (no email)
     const requesterEmail = repair.requester_email;
-
     if (requesterEmail) {
       const sendRepairEmail = require("../utils/sendRepairEmail");
+      const providerDisplay = `${provider_first_name} ${provider_last_name} from ${provider_city}`;
+
       await sendRepairEmail(
         requesterEmail,
-        `Good news! ${provider_email} submitted a quote of $${price_quote} for your repair request.`,
+        `Good news! ${providerDisplay} has submitted a quote of $${price_quote} for your repair request.`,
         repair.image_urls || []
       );
       console.log(`✅ Quote email sent to ${requesterEmail}`);
@@ -93,6 +100,7 @@ router.post("/:id/quote", async (req, res) => {
     res.status(500).json({ error: "Failed to submit quote" });
   }
 });
+
 
 
 
