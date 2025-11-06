@@ -84,20 +84,28 @@ router.post("/:id/quote", async (req, res) => {
       await sendRepairEmail(
   requesterEmail,
   `
-  <p>Good news! ${providerDisplay} has submitted a quote of <strong>$${price_quote}</strong> for your repair request.</p>
+  <p>Good news! ${providerDisplay} has submitted a quote of 
+  <strong>$${price_quote}</strong> for your repair request.</p>
+
   <p><em>You won’t be charged until you mark your repair as completed after the provider finishes the job.</em></p>
+
   <p>Please choose an option below:</p>
-  <a href="${process.env.API_URL}/api/payments/start/${id}"
-     style="background-color:#28a745;color:white;padding:10px 16px;border-radius:6px;text-decoration:none;margin-right:10px;">
+
+  <a href="${process.env.APP_BASE_URL}/api/payments/start/${id}"
+     style="background-color:#28a745;color:white;padding:10px 16px;
+     border-radius:6px;text-decoration:none;margin-right:10px;">
      ✅ Accept Quote & Proceed to Payment
   </a>
-  <a href="${process.env.API_URL}/api/repairs/${id}/reject"
-     style="background-color:#dc3545;color:white;padding:10px 16px;border-radius:6px;text-decoration:none;">
+
+  <a href="${process.env.APP_BASE_URL}/api/repairs/${id}/reject"
+     style="background-color:#dc3545;color:white;padding:10px 16px;
+     border-radius:6px;text-decoration:none;">
      ❌ Reject Quote
   </a>
   `,
   repair.image_urls || []
 );
+
 
       console.log(`✅ Quote email sent to ${requesterEmail}`);
     }
