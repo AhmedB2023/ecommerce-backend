@@ -9,7 +9,7 @@ router.post("/", async (req, res) => {
     if (!description) return res.status(400).json({ error: "Description is required" });
 
     const result = await pool.query(
-      `INSERT INTO repair_requests (property_id, requester_id, description, image_urls)
+      `INSERT INTO repair_requests (property_id, requester_id, description, image_urls,requester_email)
        VALUES ($1, $2, $3, $4)
        RETURNING *`,
       [property_id || null, requester_id || null, description, image_urls || []]
