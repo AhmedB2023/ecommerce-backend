@@ -88,11 +88,12 @@ router.post("/:id/quote", async (req, res) => {
 
         <p>Please choose an option below:</p>
 
-        <a href="${process.env.APP_BASE_URL}/api/payments/start/${id}"
-           style="background-color:#28a745;color:white;padding:10px 16px;
-           border-radius:6px;text-decoration:none;margin-right:10px;">
-           ✅ Accept Quote & Proceed to Payment
-        </a>
+      <a href="https://tajernow.com/checkout?repairId=${id}"
+   style="background-color:#28a745;color:white;padding:10px 16px;
+   border-radius:6px;text-decoration:none;margin-right:10px;">
+   ✅ Accept Quote & Proceed to Payment
+</a>
+
 
         <a href="${process.env.APP_BASE_URL}/api/repairs/${id}/reject"
            style="background-color:#dc3545;color:white;padding:10px 16px;
