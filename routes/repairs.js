@@ -88,7 +88,7 @@ router.post("/:id/quote", async (req, res) => {
 
         <p>Please choose an option below:</p>
 
-      <a href="https://tajernow.com/checkout?repairId=${id}"
+      <a href="${process.env.APP_BASE_URL}/repair-checkout?repairId=${id}"
    style="background-color:#28a745;color:white;padding:10px 16px;
    border-radius:6px;text-decoration:none;margin-right:10px;">
    ✅ Accept Quote & Proceed to Payment
