@@ -33,7 +33,12 @@ const pool = require('./db');
 
 const sendResetEmail = require('./utils/sendEmail');
 
-const allowedOrigins = ['https://tajernow.com', 'http://localhost:3000'];
+const allowedOrigins = [
+  'https://tajernow.com',
+  'http://localhost:3000',
+  'https://ecommerce-backend-y3v4.onrender.com'
+];
+
 
 app.use(cors({
   origin: (origin, callback) => {
