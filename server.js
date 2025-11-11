@@ -98,11 +98,12 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
 if (repairId && session.metadata?.repairType === "repair_request") {
   await pool.query(
     `UPDATE repair_requests
-     SET status = 'paid'
+     SET status = 'paid',
+         payment_status = 'paid'
      WHERE id = $1`,
     [repairId]
   );
-  console.log(`✅ Repair request ${repairId} marked as paid.`);
+  console.log(`✅ Repair request ${repairId} marked as paid (status + payment_status updated).`);
 }
 
    
