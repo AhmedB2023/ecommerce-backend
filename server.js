@@ -93,7 +93,7 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
 
   if (event.type === "checkout.session.completed") {
 
-
+ const session = event.data.object;
     const repairId = session.metadata?.repairId;
 if (repairId && session.metadata?.repairType === "repair_request") {
   await pool.query(
@@ -105,7 +105,7 @@ if (repairId && session.metadata?.repairType === "repair_request") {
   console.log(`✅ Repair request ${repairId} marked as paid.`);
 }
 
-    const session = event.data.object;
+   
     const reservationId = session.metadata?.reservationId;
 
     if (!reservationId) {
