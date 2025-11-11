@@ -6,14 +6,27 @@ const sendRepairEmail = require("../utils/sendRepairEmail");
 // ✅ Create repair request
 router.post("/", async (req, res) => {
   try {
-    const { description, image_urls, requester_email } = req.body;
-    if (!description) return res.status(400).json({ error: "Description is required" });
+    const { 
+      description, 
+      image_urls, 
+      requester_email, 
+      customer_address, 
+      preferred_time 
+    } = req.body;
+
+    // 🛑 Required field validation
+    if (!description || !customer_address || !preferred_time) {
+      return res.status(400).json({ 
+        error: "Description, address, and preferred time are required." 
+      });
+    }
 
     const result = await pool.query(
-      `INSERT INTO repair_requests (description, image_urls, requester_email, status)
-       VALUES ($1, $2, $3, 'open')
+      `INSERT INTO repair_requests 
+        (description, image_urls, requester_email, customer_address, preferred_time, status)
+       VALUES ($1, $2, $3, $4, $5, 'open')
        RETURNING *`,
-      [description, image_urls || [], requester_email]
+      [description, image_urls || [], requester_email, customer_address, preferred_time]
     );
 
     if (requester_email) {
@@ -26,6 +39,7 @@ router.post("/", async (req, res) => {
     res.status(500).json({ error: "Failed to create repair request" });
   }
 });
+
 
 // ✅ Get all open requests
 router.get("/open", async (req, res) => {
@@ -172,7 +186,7 @@ router.get("/payments/start/:id", async (req, res) => {
 
     // 1️⃣ Fetch repair details
     const result = await pool.query(
-      `SELECT description, price_quote, requester_email 
+      `SELECT description, price_quote, requester_email, customer_address, preferred_time 
        FROM repair_requests 
        WHERE id = $1`,
       [id]
@@ -203,18 +217,22 @@ router.get("/payments/start/:id", async (req, res) => {
         },
       ],
       mode: "payment",
-          success_url: `https://tajernow.com/payment-success?repairId=${id}`,
-          cancel_url: `https://tajernow.com/payment-cancelled`,
+      success_url: `https://tajernow.com/payment-success?repairId=${id}`,
+      cancel_url: `https://tajernow.com/payment-cancelled`,
 
-
-      metadata: { repairId: id, repairType: "repair_request" },
+      // ✅ Include all key info for webhook/provider email
+      metadata: { 
+        repairId: id.toString(), 
+        repairType: "repair_request",
+        customerAddress: repair.customer_address || "",
+        preferredTime: repair.preferred_time || ""
+      },
     });
 
-    // 👇 Add this console log to confirm Stripe URL
     console.log("💳 Stripe session created:", session.url);
 
-   // 4️⃣ Return Stripe URL to frontend (for Netlify/Render CORS safety)
-res.json({ url: session.url });
+    // 4️⃣ Return Stripe URL to frontend
+    res.json({ url: session.url });
 
   } catch (err) {
     console.error("Error starting repair payment:", err.message);
