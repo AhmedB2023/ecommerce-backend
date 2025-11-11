@@ -213,8 +213,9 @@ router.get("/payments/start/:id", async (req, res) => {
     // 👇 Add this console log to confirm Stripe URL
     console.log("💳 Stripe session created:", session.url);
 
-    // 4️⃣ Redirect to Stripe
-    res.redirect(session.url);
+   // 4️⃣ Return Stripe URL to frontend (for Netlify/Render CORS safety)
+res.json({ url: session.url });
+
   } catch (err) {
     console.error("Error starting repair payment:", err.message);
     res.status(500).send("Failed to start repair payment.");
