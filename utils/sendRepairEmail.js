@@ -1,5 +1,5 @@
-const SibApiV3Sdk = require('sib-api-v3-sdk');
-require('dotenv').config();
+const SibApiV3Sdk = require("sib-api-v3-sdk");
+require("dotenv").config();
 
 /**
  * 🧾 Send confirmation or custom email
@@ -7,28 +7,43 @@ require('dotenv').config();
  */
 const sendRepairEmail = async (toEmail, htmlContent, image_urls = []) => {
   const client = SibApiV3Sdk.ApiClient.instance;
-  client.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
+  client.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
 
   const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
   const sender = {
-    name: 'Tajer Support',
-    email: 'support@tajernow.com',
+    name: "Tajer Support",
+    email: "support@tajernow.com",
   };
+
+  // ✅ Detect subject automatically based on email type
+  let subject;
+  if (htmlContent.includes("Complete your payout setup")) {
+    subject = "Action required: Complete your payout setup with Tajer";
+  } else if (htmlContent.includes("quote has been submitted")) {
+    subject = "Your Quote Has Been Submitted Successfully";
+  } else if (htmlContent.includes("paid repair")) {
+    subject = "New Paid Repair Request";
+  } else {
+    subject = "Your Repair Request Is Being Processed";
+  }
 
   const email = {
     sender,
     to: [{ email: toEmail }],
-    subject: 'Your Repair Request Is Being Processed',
-    htmlContent: htmlContent, // ✅ use the HTML passed from routes
+    subject,
+    htmlContent: htmlContent,
   };
 
   try {
     const response = await apiInstance.sendTransacEmail(email);
-    console.log(`✅ Repair email sent to ${toEmail}`);
+    console.log(`✅ Repair email sent to ${toEmail} | Subject: ${subject}`);
     return response;
   } catch (error) {
-    console.error('❌ Error sending repair email:', error?.response?.body || error.message);
+    console.error(
+      "❌ Error sending repair email:",
+      error?.response?.body || error.message
+    );
   }
 };
 
@@ -38,13 +53,13 @@ const sendRepairEmail = async (toEmail, htmlContent, image_urls = []) => {
  */
 const sendProviderNotification = async (toEmail, details) => {
   const client = SibApiV3Sdk.ApiClient.instance;
-  client.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
+  client.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
 
   const apiInstance = new SibApiV3Sdk.TransactionalEmailsApi();
 
   const sender = {
-    name: 'Tajer Notifications',
-    email: 'support@tajernow.com',
+    name: "Tajer Notifications",
+    email: "support@tajernow.com",
   };
 
   const email = {
@@ -77,7 +92,10 @@ const sendProviderNotification = async (toEmail, details) => {
     console.log(`📧 Provider notification sent to ${toEmail}`);
     return response;
   } catch (error) {
-    console.error('❌ Error sending provider email:', error?.response?.body || error.message);
+    console.error(
+      "❌ Error sending provider email:",
+      error?.response?.body || error.message
+    );
   }
 };
 
