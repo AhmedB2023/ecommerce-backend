@@ -180,6 +180,8 @@ if (!stripeAccountId) {
     business_type: "individual",
     capabilities: { transfers: { requested: true } },
   });
+  console.log("✅ Stripe account created:", account.id);
+
 
   stripeAccountId = account.id;
 
