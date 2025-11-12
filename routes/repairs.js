@@ -217,6 +217,9 @@ const connectHtml = `
     </a>
   </p>
 
+  <p>If the button above doesn’t work, copy and paste this link into your browser:</p>
+  <p><a href="${accountLink.url}">${accountLink.url}</a></p>
+
   <p>
     This secure link is powered by Stripe, Tajer’s trusted payment partner.
     Once completed, your account will be ready to receive funds automatically
