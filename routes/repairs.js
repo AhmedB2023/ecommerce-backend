@@ -273,5 +273,36 @@ router.get("/payments/start/:id", async (req, res) => {
   }
 });
 
+// ✅ Check repair job by job code + email
+router.post("/check", async (req, res) => {
+  const { jobCode, email } = req.body;
+
+  try {
+    const result = await pool.query(
+      `SELECT id, description, status, payment_status, completion_status,
+              requester_email, provider_email
+       FROM repair_requests
+       WHERE job_code = $1`,
+      [jobCode]
+    );
+
+    if (result.rows.length === 0)
+      return res.status(404).json({ error: "Job not found" });
+
+    const repair = result.rows[0];
+
+    // Determine who is checking (user or provider)
+    let role = "";
+    if (email === repair.requester_email) role = "user";
+    else if (email === repair.provider_email) role = "provider";
+    else return res.status(403).json({ error: "Unauthorized access" });
+
+    res.json({ success: true, role, repair });
+  } catch (err) {
+    console.error("❌ Error checking repair:", err);
+    res.status(500).json({ error: "Failed to check repair" });
+  }
+});
+
 
 module.exports = router;
