@@ -273,6 +273,7 @@ router.get("/payments/start/:id", async (req, res) => {
   }
 });
 
+
 // ✅ Check repair job by job code + email
 router.post("/check", async (req, res) => {
   const jobCode = req.body.jobCode?.trim();
@@ -308,6 +309,61 @@ else if (email === repair.provider_email?.toLowerCase()) role = "provider";
     res.status(500).json({ error: "Failed to check repair" });
   }
 });
+
+
+// ✅ Provider marks repair as completed (awaiting user confirmation)
+router.post("/mark-completed", async (req, res) => {
+  try {
+    const { jobCode, email } = req.body;
+
+    // Find the job
+    const result = await pool.query(
+      `SELECT * FROM repair_requests WHERE job_code = $1`,
+      [jobCode]
+    );
+
+    if (result.rows.length === 0)
+      return res.status(404).json({ error: "Job not found" });
+
+    const repair = result.rows[0];
+
+    // Only provider can mark it
+    if (email !== repair.provider_email)
+      return res.status(403).json({ error: "Unauthorized action" });
+
+    // Update to provider_completed
+    await pool.query(
+      `UPDATE repair_requests 
+       SET completion_status = 'provider_completed'
+       WHERE job_code = $1`,
+      [jobCode]
+    );
+
+    // 📨 Notify requester to confirm completion
+    if (repair.requester_email) {
+      await sendRepairEmail(
+        repair.requester_email,
+        `
+          <h3>Repair Completed — Confirmation Needed</h3>
+          <p>Your provider has marked the job as completed.</p>
+          <p><strong>Job Code:</strong> ${repair.job_code}</p>
+          <p>Please confirm completion by visiting:</p>
+          <a href="${process.env.APP_BASE_URL}/check-my-repair"
+             style="background-color:#007bff;color:white;
+             padding:10px 16px;border-radius:6px;text-decoration:none;">
+             ✅ Confirm Completion
+          </a>
+        `
+      );
+    }
+
+    res.json({ success: true, message: "Marked as completed. Waiting for user confirmation." });
+  } catch (err) {
+    console.error("❌ Error marking job completed:", err);
+    res.status(500).json({ error: "Failed to update repair status" });
+  }
+});
+
 
 
 module.exports = router;
