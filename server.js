@@ -4,7 +4,8 @@ const app = express(); // ✅ MISSING BEFORE
 const cors = require('cors');
 const path = require('path');
 
-const { sendProviderNotification } = require('./utils/email');
+const { sendProviderNotification } = require('./utils/sendRepairEmail');
+
 
 
 // 🧳 File upload setup
