@@ -122,11 +122,16 @@ if (repairId && session.metadata?.repairType === "repair_request") {
  const repair = result.rows[0];
 if (repair?.provider_email) {
   // 🕒 Convert preferred time to readable format
-  let formattedTime = preferredTime;
-  if (!isNaN(preferredTime)) {
-    const date = new Date(Number(preferredTime));
-    formattedTime = date.toLocaleString(); // Example: "Nov 12, 2025, 3:30 PM"
+let formattedTime = preferredTime;
+if (preferredTime && isNaN(preferredTime)) {
+  try {
+    const date = new Date(preferredTime);
+    formattedTime = date.toLocaleString(); // e.g. "Nov 12, 2025, 3:30 PM"
+  } catch {
+    formattedTime = preferredTime; // fallback
   }
+}
+
 
   await sendProviderNotification(repair.provider_email, {
     description: repair.description,
