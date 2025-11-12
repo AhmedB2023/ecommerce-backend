@@ -199,19 +199,33 @@ if (!stripeAccountId) {
         type: "account_onboarding",
       });
 
-      const connectSubject = "🔗 Connect Your Bank Account to Get Paid";
-      const connectHtml = `
-        <p>Hi ${provider_first_name || "there"},</p>
-        <p>To receive payments for your repair jobs, please connect your bank account securely via Stripe.</p>
-        <p>
-          <a href="${accountLink.url}" 
-             style="background:#007bff;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;">
-             Connect Bank Account
-          </a>
-        </p>
-        <p>This is a one-time setup that lets you get paid automatically when your jobs are completed.</p>
-        <p>– The Repair Platform Team</p>
-      `;
+   const connectSubject = "Action required: Complete your payout setup with Tajer";
+const connectHtml = `
+  <h3>Hi ${provider_first_name || "there"},</h3>
+
+  <p>You're almost ready to start receiving repair payments on Tajer.</p>
+
+  <p>
+    To activate your payout setup securely through Stripe, please click the button below.
+  </p>
+
+  <p style="text-align:center;margin:20px 0;">
+    <a href="${accountLink.url}"
+       style="background:#007bff;color:#fff;padding:12px 20px;
+       border-radius:6px;text-decoration:none;display:inline-block;">
+       Complete Payout Setup
+    </a>
+  </p>
+
+  <p>
+    This secure link is powered by Stripe, Tajer’s trusted payment partner.
+    Once completed, your account will be ready to receive funds automatically
+    whenever a customer pays for a job.
+  </p>
+
+  <p>– The Tajer Support Team</p>
+`;
+
 
       await sendRepairEmail(provider_email, connectSubject, connectHtml);
       console.log(`✅ Stripe Connect email sent to provider: ${provider_email}`);
