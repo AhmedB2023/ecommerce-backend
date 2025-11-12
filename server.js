@@ -119,22 +119,25 @@ if (repairId && session.metadata?.repairType === "repair_request") {
     [repairId]
   );
 
-  const repair = result.rows[0];
-  if (repair?.provider_email) {
-    // 🕒 Convert preferred time to readable format
-let formattedTime = preferredTime;
-if (!isNaN(preferredTime)) {
-  const date = new Date(Number(preferredTime));
-  formattedTime = date.toLocaleString(); // Example: "Nov 12, 2025, 3:30 PM"
-}
-    await sendProviderNotification(repair.provider_email, {
-      description: repair.description,
-      customer_address: customerAddress,
-      preferred_time: preferredTime,
-      requester_email: repair.requester_email,
-    });
-    console.log(`📧 Provider notified for repair ${repairId}`);
+ const repair = result.rows[0];
+if (repair?.provider_email) {
+  // 🕒 Convert preferred time to readable format
+  let formattedTime = preferredTime;
+  if (!isNaN(preferredTime)) {
+    const date = new Date(Number(preferredTime));
+    formattedTime = date.toLocaleString(); // Example: "Nov 12, 2025, 3:30 PM"
   }
+
+  await sendProviderNotification(repair.provider_email, {
+    description: repair.description,
+    customer_address: customerAddress,
+    preferred_time: formattedTime, // ✅ use formattedTime here
+    requester_email: repair.requester_email,
+  });
+
+  console.log(`📧 Provider notified for repair ${repairId}`);
+}
+
 }
 
    
