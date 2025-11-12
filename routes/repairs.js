@@ -168,23 +168,25 @@ router.post("/:id/quote", async (req, res) => {
       `SELECT provider_stripe_account FROM users WHERE email = $1`,
       [provider_email]
     );
+// ✅ Stripe Connect onboarding (stored per repair request)
+let stripeAccountId = repair.provider_stripe_account;
 
-    let stripeAccountId = stripeAccountCheck.rows[0]?.provider_stripe_account;
+if (!stripeAccountId) {
+  const account = await stripe.accounts.create({
+    type: "express",
+    email: provider_email,
+    business_type: "individual",
+    capabilities: { transfers: { requested: true } },
+  });
 
-    if (!stripeAccountId) {
-      const account = await stripe.accounts.create({
-        type: "express",
-        email: provider_email,
-        business_type: "individual",
-        capabilities: { transfers: { requested: true } },
-      });
+  stripeAccountId = account.id;
 
-      stripeAccountId = account.id;
-
-      await pool.query(
-        `UPDATE users SET provider_stripe_account = $1 WHERE email = $2`,
-        [stripeAccountId, provider_email]
-      );
+  await pool.query(
+    `UPDATE repair_requests 
+     SET provider_stripe_account = $1 
+     WHERE id = $2`,
+    [stripeAccountId, id]
+  );
 
       const accountLink = await stripe.accountLinks.create({
         account: stripeAccountId,
