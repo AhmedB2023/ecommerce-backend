@@ -4,6 +4,8 @@ const app = express(); // ✅ MISSING BEFORE
 const cors = require('cors');
 const path = require('path');
 
+const { sendProviderNotification } = require('./utils/email');
+
 
 // 🧳 File upload setup
 const multer = require('multer');
@@ -96,6 +98,7 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
  const session = event.data.object;
     const repairId = session.metadata?.repairId;
 if (repairId && session.metadata?.repairType === "repair_request") {
+  // ✅ Mark the repair as paid
   await pool.query(
     `UPDATE repair_requests
      SET status = 'paid',
@@ -104,6 +107,27 @@ if (repairId && session.metadata?.repairType === "repair_request") {
     [repairId]
   );
   console.log(`✅ Repair request ${repairId} marked as paid (status + payment_status updated).`);
+
+  // 🟢 Notify the provider about the paid repair
+  const customerAddress = session.metadata.customerAddress;
+  const preferredTime = session.metadata.preferredTime;
+
+  const result = await pool.query(
+    `SELECT description, requester_email, provider_email 
+     FROM repair_requests WHERE id = $1`,
+    [repairId]
+  );
+
+  const repair = result.rows[0];
+  if (repair?.provider_email) {
+    await sendProviderNotification(repair.provider_email, {
+      description: repair.description,
+      customer_address: customerAddress,
+      preferred_time: preferredTime,
+      requester_email: repair.requester_email,
+    });
+    console.log(`📧 Provider notified for repair ${repairId}`);
+  }
 }
 
    

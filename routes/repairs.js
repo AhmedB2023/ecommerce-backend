@@ -1,7 +1,8 @@
 const express = require("express");
 const router = express.Router();
 const pool = require("../db");
-const sendRepairEmail = require("../utils/sendRepairEmail");
+const { sendRepairEmail } = require('../utils/email');
+
 
 // ✅ Create repair request
 router.post("/", async (req, res) => {
