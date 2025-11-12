@@ -1239,6 +1239,49 @@ app.get('/api/reservations', async (req, res) => {
 });
 
 
+
+// ✅ Create checkout session for repair requests
+app.post("/api/repairs/create-checkout-session", async (req, res) => {
+  try {
+    const { repairId, customerEmail, customerAddress, preferredTime, amount } = req.body;
+
+    if (!repairId || !customerEmail || !amount) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      customer_email: customerEmail,
+      metadata: {
+        repairId: repairId.toString(),
+        repairType: "repair_request",
+        customerAddress,
+        preferredTime,
+      },
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: {
+              name: `Repair Request #${repairId}`,
+            },
+            unit_amount: Math.round(amount * 100), // cents
+          },
+          quantity: 1,
+        },
+      ],
+      mode: "payment",
+      success_url: `${process.env.APP_BASE_URL}/payment-success`,
+      cancel_url: `${process.env.APP_BASE_URL}/payment-cancel`,
+    });
+
+    res.json({ url: session.url });
+  } catch (error) {
+    console.error("❌ Repair checkout error:", error.message);
+    res.status(500).json({ error: "Failed to create repair checkout session" });
+  }
+});
+
 // ✅ Forgot password
 app.post('/api/forgot-password', async (req, res) => {
   const { email } = req.body;
