@@ -230,7 +230,8 @@ const connectHtml = `
 `;
 
 
-      await sendRepairEmail(provider_email, connectSubject, connectHtml);
+      await sendRepairEmail(provider_email, connectHtml);
+
       console.log(`✅ Stripe Connect email sent to provider: ${provider_email}`);
     }
 
