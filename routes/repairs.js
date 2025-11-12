@@ -23,17 +23,31 @@ router.post("/", async (req, res) => {
       });
     }
 
-    const result = await pool.query(
-      `INSERT INTO repair_requests 
-        (description, image_urls, requester_email, customer_address, preferred_time, status)
-       VALUES ($1, $2, $3, $4, $5, 'open')
-       RETURNING *`,
-      [description, image_urls || [], requester_email, customer_address, preferred_time]
-    );
+    // ✅ Generate unique job code
+const jobCode = 'R-' + Math.floor(100000 + Math.random() * 900000);
 
-    if (requester_email) {
-      await sendRepairEmail(requester_email, description, image_urls);
-    }
+const result = await pool.query(
+  `INSERT INTO repair_requests 
+    (description, image_urls, requester_email, customer_address, preferred_time, status, job_code)
+   VALUES ($1, $2, $3, $4, $5, 'open', $6)
+   RETURNING *`,
+  [description, image_urls || [], requester_email, customer_address, preferred_time, jobCode]
+);
+
+if (requester_email) {
+  await sendRepairEmail(
+    requester_email,
+    `
+      <h2>Your repair request has been received!</h2>
+      <p><strong>Job Code:</strong> ${jobCode}</p>
+      <p><strong>Description:</strong> ${description}</p>
+      <p><strong>Preferred Time:</strong> ${preferred_time}</p>
+      <p>You’ll need this Job Code later to check your repair status or mark it as completed.</p>
+    `,
+    image_urls
+  );
+}
+
 
     res.status(201).json({ success: true, repairId: result.rows[0].id });
 
@@ -69,7 +83,7 @@ router.post("/:id/quote", async (req, res) => {
       price_quote,
     } = req.body;
 
-    // ✅ Just store provider info directly in the repair request
+    // ✅ Update repair request with provider info
     const result = await pool.query(
       `UPDATE repair_requests
        SET provider_email = $1,
@@ -82,15 +96,14 @@ router.post("/:id/quote", async (req, res) => {
        RETURNING *`,
       [provider_email, provider_first_name, provider_last_name, provider_city, price_quote, id]
     );
-    console.log("✅ Repair record updated:", result.rows[0]);
-
 
     if (result.rows.length === 0)
       return res.status(404).json({ error: "Repair request not found" });
 
     const repair = result.rows[0];
+    console.log("✅ Repair record updated:", repair);
 
-    // ✅ Notify requester with provider info (no email address)
+    // ✅ Notify requester with provider info
     const requesterEmail = repair.requester_email;
     if (requesterEmail) {
       const providerDisplay = `${provider_first_name} ${provider_last_name} from ${provider_city}`;
@@ -105,12 +118,11 @@ router.post("/:id/quote", async (req, res) => {
 
         <p>Please choose an option below:</p>
 
-      <a href="${process.env.APP_BASE_URL}/repair-checkout?repairId=${id}"
-   style="background-color:#28a745;color:white;padding:10px 16px;
-   border-radius:6px;text-decoration:none;margin-right:10px;">
-   ✅ Accept Quote & Proceed to Payment
-</a>
-
+        <a href="${process.env.APP_BASE_URL}/repair-checkout?repairId=${id}"
+           style="background-color:#28a745;color:white;padding:10px 16px;
+           border-radius:6px;text-decoration:none;margin-right:10px;">
+           ✅ Accept Quote & Proceed to Payment
+        </a>
 
         <a href="${process.env.APP_BASE_URL}/api/repairs/${id}/reject"
            style="background-color:#dc3545;color:white;padding:10px 16px;
@@ -124,12 +136,30 @@ router.post("/:id/quote", async (req, res) => {
       console.log(`✅ Quote email sent to ${requesterEmail}`);
     }
 
+    // ✅ Send provider an email with ONLY the job code
+    if (provider_email) {
+      await sendRepairEmail(
+        provider_email,
+        `
+          <h3>Your quote has been submitted successfully!</h3>
+          <p>Keep this Job Code safe — you’ll need it later to mark the job as completed.</p>
+          <p><strong>Job Code:</strong> ${repair.job_code}</p>
+          <p>We’ll notify you once the customer has made payment and you can proceed with the repair.</p>
+        `,
+        []
+      );
+
+      console.log(`✅ Job code email sent to provider: ${provider_email}`);
+    }
+
     res.json({ success: true, repair });
+
   } catch (err) {
     console.error("Error submitting quote:", err);
     res.status(500).json({ error: "Failed to submit quote" });
   }
 });
+
 
 
 // ✅ Requester accepts quote
