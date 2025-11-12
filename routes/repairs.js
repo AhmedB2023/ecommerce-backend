@@ -164,10 +164,12 @@ router.post("/:id/quote", async (req, res) => {
     }
 
     // ✅ Stripe Connect onboarding (only if provider not connected)
-    const stripeAccountCheck = await pool.query(
-      `SELECT provider_stripe_account FROM users WHERE email = $1`,
-      [provider_email]
-    );
+    
+const stripeAccountCheck = await pool.query(
+  `SELECT provider_stripe_account FROM repair_requests WHERE id = $1`,
+  [id]
+);
+
 // ✅ Stripe Connect onboarding (stored per repair request)
 let stripeAccountId = repair.provider_stripe_account;
 
