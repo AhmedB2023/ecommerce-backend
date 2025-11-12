@@ -123,10 +123,18 @@ if (repairId && session.metadata?.repairType === "repair_request") {
 if (repair?.provider_email) {
   // 🕒 Convert preferred time to readable format
 let formattedTime = preferredTime;
-if (preferredTime && isNaN(preferredTime)) {
+
+if (preferredTime) {
+  let parsedTime = preferredTime;
+
+  // If it looks like a number (timestamp in seconds), multiply by 1000
+  if (!isNaN(preferredTime)) {
+    parsedTime = Number(preferredTime) * 1000;
+  }
+
   try {
-    const date = new Date(preferredTime);
-    formattedTime = date.toLocaleString(); // e.g. "Nov 12, 2025, 3:30 PM"
+    const date = new Date(parsedTime);
+    formattedTime = date.toLocaleString(); // ✅ readable: "Nov 12, 2025, 3:30 PM"
   } catch {
     formattedTime = preferredTime; // fallback
   }
