@@ -281,15 +281,13 @@ const email = req.body.email?.trim().toLowerCase();
 
 
   try {
-    console.log("📩 /api/repairs/check called with:", jobCode, email);
-
     const result = await pool.query(
-      `SELECT id, description, status, payment_status, completion_status,
-              requester_email, provider_email
-       FROM repair_requests
-       WHERE job_code = $1`,
-      [jobCode]
-    );
+  `SELECT id, job_code, description, status, payment_status, completion_status,
+          requester_email, provider_email
+   FROM repair_requests
+   WHERE job_code = $1`,
+  [jobCode]
+);
 
     if (result.rows.length === 0)
       return res.status(404).json({ error: "Job not found" });
