@@ -4,6 +4,10 @@ const pool = require("../db");
 const { sendRepairEmail } = require('../utils/sendRepairEmail');
 
 
+const Stripe = require("stripe");
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
+
 
 // ✅ Create repair request
 router.post("/", async (req, res) => {
@@ -94,7 +98,14 @@ router.post("/:id/quote", async (req, res) => {
            status = 'quoted'
        WHERE id = $6
        RETURNING *`,
-      [provider_email, provider_first_name, provider_last_name, provider_city, price_quote, id]
+      [
+        provider_email,
+        provider_first_name,
+        provider_last_name,
+        provider_city,
+        price_quote,
+        id,
+      ]
     );
 
     if (result.rows.length === 0)
@@ -136,7 +147,7 @@ router.post("/:id/quote", async (req, res) => {
       console.log(`✅ Quote email sent to ${requesterEmail}`);
     }
 
-    // ✅ Send provider an email with ONLY the job code
+    // ✅ Send provider a confirmation + job code email
     if (provider_email) {
       await sendRepairEmail(
         provider_email,
@@ -152,10 +163,57 @@ router.post("/:id/quote", async (req, res) => {
       console.log(`✅ Job code email sent to provider: ${provider_email}`);
     }
 
-    res.json({ success: true, repair });
+    // ✅ Stripe Connect onboarding (only if provider not connected)
+    const stripeAccountCheck = await pool.query(
+      `SELECT provider_stripe_account FROM users WHERE email = $1`,
+      [provider_email]
+    );
 
+    let stripeAccountId = stripeAccountCheck.rows[0]?.provider_stripe_account;
+
+    if (!stripeAccountId) {
+      const account = await stripe.accounts.create({
+        type: "express",
+        email: provider_email,
+        business_type: "individual",
+        capabilities: { transfers: { requested: true } },
+      });
+
+      stripeAccountId = account.id;
+
+      await pool.query(
+        `UPDATE users SET provider_stripe_account = $1 WHERE email = $2`,
+        [stripeAccountId, provider_email]
+      );
+
+      const accountLink = await stripe.accountLinks.create({
+        account: stripeAccountId,
+        refresh_url: "https://tajernow.com/reauth",
+        return_url: "https://tajernow.com/stripe-success",
+        type: "account_onboarding",
+      });
+
+      const connectSubject = "🔗 Connect Your Bank Account to Get Paid";
+      const connectHtml = `
+        <p>Hi ${provider_first_name || "there"},</p>
+        <p>To receive payments for your repair jobs, please connect your bank account securely via Stripe.</p>
+        <p>
+          <a href="${accountLink.url}" 
+             style="background:#007bff;color:#fff;padding:10px 16px;text-decoration:none;border-radius:6px;">
+             Connect Bank Account
+          </a>
+        </p>
+        <p>This is a one-time setup that lets you get paid automatically when your jobs are completed.</p>
+        <p>– The Repair Platform Team</p>
+      `;
+
+      await sendRepairEmail(provider_email, connectSubject, connectHtml);
+      console.log(`✅ Stripe Connect email sent to provider: ${provider_email}`);
+    }
+
+    res.json({ success: true, repair });
   } catch (err) {
-    console.error("Error submitting quote:", err);
+    console.error("❌ Error submitting quote:", err);
     res.status(500).json({ error: "Failed to submit quote" });
   }
 });
@@ -208,8 +266,7 @@ router.get("/:id/reject", async (req, res) => {
   }
 });
 
-const Stripe = require("stripe");
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
 
 // ✅ Accept quote and redirect to Stripe
 router.get("/payments/start/:id", async (req, res) => {
@@ -362,6 +419,93 @@ router.post("/mark-completed", async (req, res) => {
   }
 });
 
+// ✅ User confirms job completion
+router.post("/confirm-completion", async (req, res) => {
+  const { jobCode, email } = req.body;
+
+  if (!jobCode || !email) {
+    return res.status(400).json({ success: false, error: "Missing job code or email" });
+  }
+
+  try {
+    // 1️⃣ Verify the job
+   const { rows } = await pool.query(
+  `SELECT * FROM repair_requests WHERE job_code = $1 AND requester_email = $2`,
+  [jobCode, email]
+);
+
+    if (rows.length === 0)
+      return res.status(404).json({ success: false, error: "Repair not found or unauthorized" });
+
+    const repair = rows[0];
+
+    if (repair.completion_status !== "provider_completed") {
+      return res.status(400).json({
+        success: false,
+        error: "Job not yet marked completed by provider",
+      });
+    }
+
+    // 2️⃣ Update job status
+    await pool.query(
+      `UPDATE repair_requests 
+       SET completion_status = 'user_confirmed', status = 'completed' 
+       WHERE job_code = $1`,
+      [jobCode]
+    );
+
+    // 3️⃣ Payment release (10% platform fee)
+    if (repair.payment_intent_id && repair.provider_stripe_account) {
+      const providerAmount = Math.round(repair.amount * 100 * 0.9); // 90% to provider
+      const platformFee = Math.round(repair.amount * 100 * 0.1); // 10% fee
+
+      await stripe.transfers.create({
+        amount: providerAmount,
+        currency: "usd",
+        destination: repair.provider_stripe_account,
+        transfer_group: repair.job_code,
+      });
+
+      console.log(`💰 Payment released: $${providerAmount / 100} to provider, $${platformFee / 100} kept by platform`);
+    }
+
+    // 4️⃣ Send email notifications
+    const subjectProvider = "💰 Payment Released - Job Completed";
+    const bodyProvider = `
+      Hi ${repair.provider_name || "Provider"},
+      <br><br>
+      The user has confirmed that the job <strong>${repair.description}</strong> is complete.
+      <br>Your payment has been released to your Stripe account.
+      <br><br>
+      Thank you for providing excellent service!<br>
+      <strong>- Repair Platform Team</strong>
+    `;
+
+    const subjectUser = "✅ Job Completion Confirmed";
+    const bodyUser = `
+      Hi ${repair.customer_name || "Customer"},
+      <br><br>
+      Thank you for confirming the completion of your repair job:
+      <strong>${repair.description}</strong>.
+      <br>Your payment has been successfully released to the provider.
+      <br><br>
+      We appreciate your trust in our platform.<br>
+      <strong>- Repair Platform Team</strong>
+    `;
+
+    await sendRepairEmail(repair.provider_email, subjectProvider, bodyProvider);
+   await sendRepairEmail(repair.requester_email, subjectUser, bodyUser);
+
+
+    res.json({
+      success: true,
+      message: "✅ Completion confirmed, payment released, and emails sent to both parties.",
+    });
+  } catch (err) {
+    console.error("❌ Error in confirm-completion:", err);
+    res.status(500).json({ success: false, error: "Server error confirming completion" });
+  }
+});
 
 
 module.exports = router;
