@@ -275,7 +275,9 @@ router.get("/payments/start/:id", async (req, res) => {
 
 // ✅ Check repair job by job code + email
 router.post("/check", async (req, res) => {
-  const { jobCode, email } = req.body;
+  const jobCode = req.body.jobCode?.trim();
+const email = req.body.email?.trim().toLowerCase();
+
 
   try {
     console.log("📩 /api/repairs/check called with:", jobCode, email);
@@ -295,8 +297,9 @@ router.post("/check", async (req, res) => {
 
     // Determine who is checking (user or provider)
     let role = "";
-    if (email === repair.requester_email) role = "user";
-    else if (email === repair.provider_email) role = "provider";
+   if (email === repair.requester_email?.toLowerCase()) role = "user";
+else if (email === repair.provider_email?.toLowerCase()) role = "provider";
+
     else return res.status(403).json({ error: "Unauthorized access" });
 
     res.json({ success: true, role, repair });
