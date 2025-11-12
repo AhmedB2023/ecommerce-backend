@@ -35,7 +35,8 @@ router.post("/", async (req, res) => {
       await sendRepairEmail(requester_email, description, image_urls);
     }
 
-    res.status(201).json({ success: true, repair: result.rows[0] });
+    res.status(201).json({ success: true, repairId: result.rows[0].id });
+
   } catch (err) {
     console.error("Error creating repair request:", err);
     res.status(500).json({ error: "Failed to create repair request" });
