@@ -278,6 +278,8 @@ router.post("/check", async (req, res) => {
   const { jobCode, email } = req.body;
 
   try {
+    console.log("📩 /api/repairs/check called with:", jobCode, email);
+
     const result = await pool.query(
       `SELECT id, description, status, payment_status, completion_status,
               requester_email, provider_email
