@@ -557,12 +557,13 @@ router.post("/create-payment-intent/:id", async (req, res) => {
     const paymentIntent = await stripe.paymentIntents.create({
   amount: Math.round(repair.price_quote * 100),
   currency: "usd",
-  on_behalf_of: repair.provider_stripe_account,
 
   application_fee_amount: Math.round(repair.price_quote * 0.10 * 100),
 
+  transfer_data: {
+    destination: repair.provider_stripe_account,  // ⭐ SEND MONEY TO PROVIDER
+  },
 
-  // ⭐ Stripe will hold funds in platform balance after payment
   automatic_payment_methods: { enabled: true },
 
   metadata: {
