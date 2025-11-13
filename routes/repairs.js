@@ -19,6 +19,8 @@ router.post("/", async (req, res) => {
       customer_address, 
       preferred_time 
     } = req.body;
+    console.log("🔥 Preferred time received by backend:", req.body.preferred_time);
+
 
     // 🛑 Required field validation
     if (!description || !customer_address || !preferred_time) {
