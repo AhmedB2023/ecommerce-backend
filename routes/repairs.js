@@ -122,8 +122,9 @@ router.post("/:id/quote", async (req, res) => {
       await sendRepairEmail(
         requesterEmail,
         `
-        <p>Good news! ${providerDisplay} has submitted a quote of 
-        <strong>$${price_quote}</strong> for your repair request.</p>
+        <p>You received a new quote from ${providerDisplay} for your repair request. 
+The quoted price is <strong>$${price_quote}</strong>.</p>
+
 
         <p><em>You won’t be charged until you mark your repair as completed after the provider finishes the job.</em></p>
 
