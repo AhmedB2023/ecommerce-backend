@@ -251,7 +251,6 @@ const result = await db.query(
   res.status(200).json({ received: true });
 });
 
-
 app.use(express.json());
 
 

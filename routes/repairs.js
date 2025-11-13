@@ -295,67 +295,6 @@ router.get("/:id/reject", async (req, res) => {
 
 
 
-// ✅ Accept quote and redirect to Stripe
-router.get("/payments/start/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    console.log("🚀 /payments/start called with ID:", id);
-
-    // 1️⃣ Fetch repair details
-    const result = await pool.query(
-      `SELECT description, price_quote, requester_email, customer_address, preferred_time 
-       FROM repair_requests 
-       WHERE id = $1`,
-      [id]
-    );
-    const repair = result.rows[0];
-    if (!repair) return res.status(404).send("Repair request not found.");
-
-    // 2️⃣ Update status before redirect
-    await pool.query(
-      `UPDATE repair_requests
-       SET status = 'accepted_pending_payment'
-       WHERE id = $1`,
-      [id]
-    );
-
-    // 3️⃣ Create Stripe Checkout session
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      customer_email: repair.requester_email,
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: { name: `Repair: ${repair.description}` },
-            unit_amount: Math.round(repair.price_quote * 100),
-          },
-          quantity: 1,
-        },
-      ],
-      mode: "payment",
-      success_url: `https://tajernow.com/payment-success?repairId=${id}`,
-      cancel_url: `https://tajernow.com/payment-cancelled`,
-
-      // ✅ Include all key info for webhook/provider email
-      metadata: { 
-        repairId: id.toString(), 
-        repairType: "repair_request",
-        customerAddress: repair.customer_address || "",
-        preferredTime: repair.preferred_time || ""
-      },
-    });
-
-    console.log("💳 Stripe session created:", session.url);
-
-    // 4️⃣ Return Stripe URL to frontend
-    res.json({ url: session.url });
-
-  } catch (err) {
-    console.error("Error starting repair payment:", err.message);
-    res.status(500).send("Failed to start repair payment.");
-  }
-});
 
 
 // ✅ Check repair job by job code + email
@@ -533,6 +472,47 @@ router.post("/confirm-completion", async (req, res) => {
     res.status(500).json({ success: false, error: "Server error confirming completion" });
   }
 });
+// ✅ Create PaymentIntent (holds funds)
+router.post("/create-payment-intent/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1️⃣ Fetch repair request
+    const result = await pool.query(
+      `SELECT * FROM repair_requests WHERE id = $1`,
+      [id]
+    );
+    const repair = result.rows[0];
+    if (!repair) return res.status(404).json({ error: "Repair not found" });
+
+    // 2️⃣ Create PaymentIntent (hold payment)
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(repair.price_quote * 100),
+      currency: "usd",
+      capture_method: "manual",     // 🔥 HOLD payment
+      application_fee_amount: Math.round(repair.price_quote * 0.10 * 100), // platform 10%
+      transfer_data: {
+        destination: repair.provider_stripe_account, // provider gets 90% later
+      },
+      metadata: {
+        repair_id: repair.id,
+      },
+    });
+
+    // 3️⃣ Save PaymentIntent ID
+    await pool.query(
+      `UPDATE repair_requests SET payment_intent_id = $1 WHERE id = $2`,
+      [paymentIntent.id, id]
+    );
+
+    res.json({ clientSecret: paymentIntent.client_secret });
+
+  } catch (err) {
+    console.error("❌ Error creating PaymentIntent", err);
+    res.status(500).json({ error: "Failed to create PaymentIntent" });
+  }
+});
+
 
 
 module.exports = router;
