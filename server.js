@@ -56,29 +56,6 @@ app.use(cors({
   credentials: true,
 }));
 
-app.use(express.json());
-
-
-// ✅ Serve uploaded images statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-
-// ✅ Repair routes
-const repairRoutes = require("./routes/repairs");
-app.use("/api/repairs", repairRoutes);
-
-
-
-
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
-
-// 📧 Brevo setup
-const SibApiV3Sdk = require('sib-api-v3-sdk');
-const defaultClient = SibApiV3Sdk.ApiClient.instance;
-const apiKey = defaultClient.authentications['api-key'];
-apiKey.apiKey = process.env.BREVO_API_KEY;
-const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
-const sendEmail = require('./utils/sendEmail');
 
 app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
   console.log("🔥 Stripe webhook called");
@@ -269,6 +246,32 @@ const result = await db.query(
 
   res.status(200).json({ received: true });
 });
+
+
+app.use(express.json());
+
+
+// ✅ Serve uploaded images statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+
+// ✅ Repair routes
+const repairRoutes = require("./routes/repairs");
+app.use("/api/repairs", repairRoutes);
+
+
+
+
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
+// 📧 Brevo setup
+const SibApiV3Sdk = require('sib-api-v3-sdk');
+const defaultClient = SibApiV3Sdk.ApiClient.instance;
+const apiKey = defaultClient.authentications['api-key'];
+apiKey.apiKey = process.env.BREVO_API_KEY;
+const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+const sendEmail = require('./utils/sendEmail');
+
 
 
 
