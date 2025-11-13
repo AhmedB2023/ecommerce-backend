@@ -262,7 +262,10 @@ app.use("/api/repairs", repairRoutes);
 
 
 
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2025-05-28.basil"
+});
+
 
 // 📧 Brevo setup
 const SibApiV3Sdk = require('sib-api-v3-sdk');
