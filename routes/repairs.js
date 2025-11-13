@@ -177,12 +177,18 @@ const stripeAccountCheck = await pool.query(
 let stripeAccountId = repair.provider_stripe_account;
 
 if (!stripeAccountId) {
-  const account = await stripe.accounts.create({
-    type: "express",
-    email: provider_email,
-    business_type: "individual",
-    capabilities: { transfers: { requested: true } },
-  });
+ const account = await stripe.accounts.create({
+  type: "express",
+  email: provider_email,
+  business_type: "individual",
+
+  // ⭐ THIS IS THE FIX → Required for delayed payouts
+  capabilities: {
+    card_payments: { requested: true },
+    transfers: { requested: true }
+  }
+});
+
   console.log("✅ Stripe account created:", account.id);
 
 
@@ -481,11 +487,21 @@ router.post("/confirm-completion", async (req, res) => {
       [jobCode]
     );
 
-   // 3️⃣ Capture the held funds
-if (repair.payment_intent_id) {
-  await stripe.paymentIntents.capture(repair.payment_intent_id);
-  console.log("💰 Payment captured and released via Stripe Connect");
-}
+// 3️⃣ Release payout to provider (90%)
+const providerAmount = Math.round(repair.price_quote * 0.90 * 100);
+
+const transfer = await stripe.transfers.create({
+  amount: providerAmount,
+  currency: "usd",
+  destination: repair.provider_stripe_account,
+  metadata: {
+    repair_id: repair.id,
+    job_code: repair.job_code,
+    type: "repair_payout"
+  }
+});
+
+console.log("💰 Payout released to provider:", transfer.id);
 
     // 4️⃣ Send email notifications
     const subjectProvider = "💰 Payment Released - Job Completed";
@@ -539,17 +555,18 @@ router.post("/create-payment-intent/:id", async (req, res) => {
 
     // 2️⃣ Create PaymentIntent (hold payment)
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(repair.price_quote * 100),
-      currency: "usd",
-      capture_method: "manual",     // 🔥 HOLD payment
-      application_fee_amount: Math.round(repair.price_quote * 0.10 * 100), // platform 10%
-      transfer_data: {
-        destination: repair.provider_stripe_account, // provider gets 90% later
-      },
-      metadata: {
-        repair_id: repair.id,
-      },
-    });
+  amount: Math.round(repair.price_quote * 100),
+  currency: "usd",
+
+  // ⭐ Stripe will hold funds in platform balance after payment
+  automatic_payment_methods: { enabled: true },
+
+  metadata: {
+    repair_id: repair.id,
+    provider_account: repair.provider_stripe_account
+  }
+});
+
 
     // 3️⃣ Save PaymentIntent ID
     await pool.query(
