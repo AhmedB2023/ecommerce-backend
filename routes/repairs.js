@@ -295,6 +295,67 @@ router.get("/:id/reject", async (req, res) => {
 
 
 
+// ✅ Accept quote and redirect to Stripe
+router.get("/payments/start/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log("🚀 /payments/start called with ID:", id);
+
+    // 1️⃣ Fetch repair details
+    const result = await pool.query(
+      `SELECT description, price_quote, requester_email, customer_address, preferred_time 
+       FROM repair_requests 
+       WHERE id = $1`,
+      [id]
+    );
+    const repair = result.rows[0];
+    if (!repair) return res.status(404).send("Repair request not found.");
+
+    // 2️⃣ Update status before redirect
+    await pool.query(
+      `UPDATE repair_requests
+       SET status = 'accepted_pending_payment'
+       WHERE id = $1`,
+      [id]
+    );
+
+    // 3️⃣ Create Stripe Checkout session
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ["card"],
+      customer_email: repair.requester_email,
+      line_items: [
+        {
+          price_data: {
+            currency: "usd",
+            product_data: { name: `Repair: ${repair.description}` },
+            unit_amount: Math.round(repair.price_quote * 100),
+          },
+          quantity: 1,
+        },
+      ],
+      mode: "payment",
+      success_url: `https://tajernow.com/payment-success?repairId=${id}`,
+      cancel_url: `https://tajernow.com/payment-cancelled`,
+
+      // ✅ Include all key info for webhook/provider email
+      metadata: { 
+        repairId: id.toString(), 
+        repairType: "repair_request",
+        customerAddress: repair.customer_address || "",
+        preferredTime: repair.preferred_time || ""
+      },
+    });
+
+    console.log("💳 Stripe session created:", session.url);
+
+    // 4️⃣ Return Stripe URL to frontend
+    res.json({ url: session.url });
+
+  } catch (err) {
+    console.error("Error starting repair payment:", err.message);
+    res.status(500).send("Failed to start repair payment.");
+  }
+});
 
 
 // ✅ Check repair job by job code + email
@@ -420,20 +481,11 @@ router.post("/confirm-completion", async (req, res) => {
       [jobCode]
     );
 
-    // 3️⃣ Payment release (10% platform fee)
-    if (repair.payment_intent_id && repair.provider_stripe_account) {
-      const providerAmount = Math.round(repair.amount * 100 * 0.9); // 90% to provider
-      const platformFee = Math.round(repair.amount * 100 * 0.1); // 10% fee
-
-      await stripe.transfers.create({
-        amount: providerAmount,
-        currency: "usd",
-        destination: repair.provider_stripe_account,
-        transfer_group: repair.job_code,
-      });
-
-      console.log(`💰 Payment released: $${providerAmount / 100} to provider, $${platformFee / 100} kept by platform`);
-    }
+   // 3️⃣ Capture the held funds
+if (repair.payment_intent_id) {
+  await stripe.paymentIntents.capture(repair.payment_intent_id);
+  console.log("💰 Payment captured and released via Stripe Connect");
+}
 
     // 4️⃣ Send email notifications
     const subjectProvider = "💰 Payment Released - Job Completed";
