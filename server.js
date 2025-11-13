@@ -25,6 +25,10 @@ cloudinary.config({
 const bodyParser = require("body-parser");
 
 const Stripe = require('stripe');
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2025-05-28.basil"
+});
+
 const bcrypt = require('bcryptjs');
 
 const { v4: uuidv4 } = require('uuid');
@@ -262,9 +266,6 @@ app.use("/api/repairs", repairRoutes);
 
 
 
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-05-28.basil"
-});
 
 
 // 📧 Brevo setup
