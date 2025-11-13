@@ -557,6 +557,8 @@ router.post("/create-payment-intent/:id", async (req, res) => {
     const paymentIntent = await stripe.paymentIntents.create({
   amount: Math.round(repair.price_quote * 100),
   currency: "usd",
+  application_fee_amount: Math.round(repair.price_quote * 0.10 * 100),
+
 
   // ⭐ Stripe will hold funds in platform balance after payment
   automatic_payment_methods: { enabled: true },
