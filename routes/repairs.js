@@ -114,79 +114,92 @@ router.post("/:id/quote", async (req, res) => {
       return res.status(404).json({ error: "Repair request not found" });
 
     const repair = result.rows[0];
+    console.log("✅ Repair record updated:", repair);
 
-    // ---------------------------
-    // ✅ SEND EMAIL TO USER ONLY
-    // ---------------------------
-
+    // ✅ Notify requester with provider info
     const requesterEmail = repair.requester_email;
     if (requesterEmail) {
       const providerDisplay = `${provider_first_name} ${provider_last_name} from ${provider_city}`;
 
       await sendRepairEmail(
-        requesterEmail,   // ⭐ USER EMAIL ONLY
+        requesterEmail,
         `
-          <p>You received a new quote from ${providerDisplay} for your repair request.</p>
-          <p>The quoted price is <strong>$${price_quote}</strong>.</p>
+        <p>You received a new quote from ${providerDisplay} for your repair request. 
+The quoted price is <strong>$${price_quote}</strong>.</p>
 
-          <p><em>You won’t be charged until you mark your repair as completed.</em></p>
 
-          <p>Please choose an option below:</p>
+        <p><em>You won’t be charged until you mark your repair as completed after the provider finishes the job.</em></p>
 
-          <a href="${process.env.APP_BASE_URL}/repair-checkout?repairId=${id}"
-             style="background-color:#28a745;color:white;padding:10px 16px;
-             border-radius:6px;text-decoration:none;margin-right:10px;">
-             ✅ Accept Quote & Proceed to Payment
-          </a>
+        <p>Please choose an option below:</p>
 
-          <a href="${process.env.APP_BASE_URL}/api/repairs/${id}/reject"
-             style="background-color:#dc3545;color:white;padding:10px 16px;
-             border-radius:6px;text-decoration:none;">
-             ❌ Reject Quote
-          </a>
+        <a href="${process.env.APP_BASE_URL}/repair-checkout?repairId=${id}"
+           style="background-color:#28a745;color:white;padding:10px 16px;
+           border-radius:6px;text-decoration:none;margin-right:10px;">
+           ✅ Accept Quote & Proceed to Payment
+        </a>
+
+        <a href="${process.env.APP_BASE_URL}/api/repairs/${id}/reject"
+           style="background-color:#dc3545;color:white;padding:10px 16px;
+           border-radius:6px;text-decoration:none;">
+           ❌ Reject Quote
+        </a>
         `,
         repair.image_urls || []
       );
+
+      console.log(`✅ Quote email sent to ${requesterEmail}`);
     }
 
-    // --------------------------------------------------
-    // ✅ PROVIDER EMAIL — **ONLY JOB CODE**, NOTHING ELSE
-    // --------------------------------------------------
+    // ✅ Send provider a confirmation + job code email
     if (provider_email) {
       await sendRepairEmail(
         provider_email,
         `
           <h3>Your quote has been submitted successfully!</h3>
-          <p>Keep this Job Code safe — you’ll need it later.</p>
+          <p>Keep this Job Code safe — you’ll need it later to mark the job as completed.</p>
           <p><strong>Job Code:</strong> ${repair.job_code}</p>
-          <p>We’ll notify you once the customer has made payment.</p>
-        `
+          <p>We’ll notify you once the customer has made payment and you can proceed with the repair.</p>
+        `,
+        []
       );
+
+      console.log(`✅ Job code email sent to provider: ${provider_email}`);
     }
 
-    // --------------------------------------------------
-    // ✅ STRIPE CONNECT EMAIL (SAFE — DOES NOT INCLUDE USER EMAIL)
-    // --------------------------------------------------
-    let stripeAccountId = repair.provider_stripe_account;
+    // ✅ Stripe Connect onboarding (only if provider not connected)
+    
+const stripeAccountCheck = await pool.query(
+  `SELECT provider_stripe_account FROM repair_requests WHERE id = $1`,
+  [id]
+);
 
-    if (!stripeAccountId) {
-    const account = await stripe.accounts.create({
+// ✅ Stripe Connect onboarding (stored per repair request)
+let stripeAccountId = repair.provider_stripe_account;
+
+if (!stripeAccountId) {
+ const account = await stripe.accounts.create({
   type: "express",
   email: provider_email,
   business_type: "individual",
+
+  // ⭐ THIS IS THE FIX → Required for delayed payouts
   capabilities: {
-    transfers: { requested: true },
-    card_payments: { requested: true }
+    card_payments: { requested: true },
+    transfers: { requested: true }
   }
 });
 
+  console.log("✅ Stripe account created:", account.id);
 
-      stripeAccountId = account.id;
 
-      await pool.query(
-        `UPDATE repair_requests SET provider_stripe_account = $1 WHERE id = $2`,
-        [stripeAccountId, id]
-      );
+  stripeAccountId = account.id;
+
+  await pool.query(
+    `UPDATE repair_requests 
+     SET provider_stripe_account = $1 
+     WHERE id = $2`,
+    [stripeAccountId, id]
+  );
 
       const accountLink = await stripe.accountLinks.create({
         account: stripeAccountId,
@@ -195,23 +208,43 @@ router.post("/:id/quote", async (req, res) => {
         type: "account_onboarding",
       });
 
-      await sendRepairEmail(
-        provider_email,
-        `
-          <h3>Complete Your Payout Setup</h3>
-          <p>To start receiving payments from Tajer, complete your payout setup:</p>
-          <a href="${accountLink.url}"
-             style="background:#007bff;color:#fff;padding:12px 20px;
-             border-radius:6px;text-decoration:none;display:inline-block;">
-             Complete Payout Setup
-          </a>
-          <p>If the button doesn’t work, use this link: ${accountLink.url}</p>
-        `
-      );
+   const connectSubject = "Action required: Complete your payout setup with Tajer";
+const connectHtml = `
+  <h3>Hi ${provider_first_name || "there"},</h3>
+
+  <p>You're almost ready to start receiving repair payments on Tajer.</p>
+
+  <p>
+    To activate your payout setup securely through Stripe, please click the button below.
+  </p>
+
+  <p style="text-align:center;margin:20px 0;">
+    <a href="${accountLink.url}"
+       style="background:#007bff;color:#fff;padding:12px 20px;
+       border-radius:6px;text-decoration:none;display:inline-block;">
+       Complete Payout Setup
+    </a>
+  </p>
+
+  <p>If the button above doesn’t work, copy and paste this link into your browser:</p>
+  <p><a href="${accountLink.url}">${accountLink.url}</a></p>
+
+  <p>
+    This secure link is powered by Stripe, Tajer’s trusted payment partner.
+    Once completed, your account will be ready to receive funds automatically
+    whenever a customer pays for a job.
+  </p>
+
+  <p>– The Tajer Support Team</p>
+`;
+
+
+      await sendRepairEmail(provider_email, connectHtml);
+
+      console.log(`✅ Stripe Connect email sent to provider: ${provider_email}`);
     }
 
     res.json({ success: true, repair });
-
   } catch (err) {
     console.error("❌ Error submitting quote:", err);
     res.status(500).json({ error: "Failed to submit quote" });
