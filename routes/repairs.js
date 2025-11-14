@@ -301,60 +301,40 @@ router.get("/:id/reject", async (req, res) => {
 
 
 
-// ✅ Accept quote and redirect to Stripe
 router.get("/payments/start/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    console.log("🚀 /payments/start called with ID:", id);
 
-    // 1️⃣ Fetch repair details
+    // Get repair
     const result = await pool.query(
-      `SELECT description, price_quote, requester_email, customer_address, preferred_time 
-       FROM repair_requests 
-       WHERE id = $1`,
+      `SELECT * FROM repair_requests WHERE id = $1`,
       [id]
     );
     const repair = result.rows[0];
-    if (!repair) return res.status(404).send("Repair request not found.");
+    if (!repair) return res.status(404).send("Repair request not found");
 
-    // 2️⃣ Update status before redirect
-    await pool.query(
-      `UPDATE repair_requests
-       SET status = 'accepted_pending_payment'
-       WHERE id = $1`,
-      [id]
-    );
+    // Create PaymentIntent FIRST
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(repair.price_quote * 100),
+      currency: "usd",
 
-    // 3️⃣ Create Stripe Checkout session
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      customer_email: repair.requester_email,
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: { name: `Repair: ${repair.description}` },
-            unit_amount: Math.round(repair.price_quote * 100),
-          },
-          quantity: 1,
-        },
-      ],
-      mode: "payment",
-      success_url: `https://tajernow.com/payment-success?repairId=${id}`,
-      cancel_url: `https://tajernow.com/payment-cancelled`,
-
-      // ✅ Include all key info for webhook/provider email
-      metadata: { 
-        repairId: id.toString(), 
-        repairType: "repair_request",
-        customerAddress: repair.customer_address || "",
-        preferredTime: repair.preferred_time || ""
+      application_fee_amount: Math.round(repair.price_quote * 0.10 * 100),
+      transfer_data: {
+        destination: repair.provider_stripe_account,
       },
+
+      metadata: { repairId: id }
     });
 
-    console.log("💳 Stripe session created:", session.url);
+    // Then Checkout Session USES THAT paymentIntent
+    const session = await stripe.checkout.sessions.create({
+      mode: "payment",
+      payment_intent: paymentIntent.id, // ⭐ FIX
 
-    // 4️⃣ Return Stripe URL to frontend
+      success_url: `https://tajernow.com/payment-success?repairId=${id}`,
+      cancel_url: `https://tajernow.com/payment-cancelled`,
+    });
+
     res.json({ url: session.url });
 
   } catch (err) {
@@ -362,6 +342,7 @@ router.get("/payments/start/:id", async (req, res) => {
     res.status(500).send("Failed to start repair payment.");
   }
 });
+
 
 
 // ✅ Check repair job by job code + email
