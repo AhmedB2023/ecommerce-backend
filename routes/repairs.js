@@ -177,6 +177,17 @@ const stripeAccountCheck = await pool.query(
 let stripeAccountId = repair.provider_stripe_account;
 
 if (!stripeAccountId) {
+  // STEP 1: Check if provider already has a Stripe account
+const existing = await pool.query(
+  "SELECT provider_stripe_account FROM repair_requests WHERE provider_email = $1 AND provider_stripe_account IS NOT NULL",
+  [provider_email]
+);
+
+if (existing.rows.length > 0) {
+  // Provider already has an account → reuse it
+  providerStripeAccountId = existing.rows[0].provider_stripe_account;
+}
+
  const account = await stripe.accounts.create({
   type: "express",
   email: provider_email,
