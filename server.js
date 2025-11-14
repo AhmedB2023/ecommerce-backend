@@ -73,8 +73,8 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  if (event.type === "payment_intent.succeeded")
- {
+ if (event.type === "checkout.session.completed") {
+
 
  const session = event.data.object;
     const repairId = session.metadata?.repairId;
