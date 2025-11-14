@@ -134,13 +134,7 @@ if (preferredTime) {
 
 }
 
-   
-    const reservationId = session.metadata?.reservationId;
-
-    if (!reservationId) {
-      console.error("⚠️ No reservationId in metadata");
-      return res.status(400).send("Missing reservationId");
-    }
+  
 
     try {
     // Extract values from metadata and session
