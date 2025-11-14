@@ -634,31 +634,40 @@ if (!propertyPrice || propertyPrice <= 0) {
       serviceFee: serviceFee.toString()
     };
 
-    // 6️⃣ Create Stripe checkout session with secure, verified total amount
-    const session = await stripe.checkout.sessions.create({
-      payment_method_types: ["card"],
-      customer_email: tenantEmail,
-       metadata: {
-    reservationId: reservationId.toString(),
-    propertyPrice: propertyPrice.toString(),  // <-- Add this
-    serviceFee: serviceFee.toString()         // <-- Add this
+   // 6️⃣ Create Stripe checkout session with secure, verified total amount
+const session = await stripe.checkout.sessions.create({
+  payment_method_types: ["card"],
+  customer_email: tenantEmail,
+
+  // ⭐ APPLICATION FEE ADDED ⭐
+  payment_intent_data: {
+    application_fee_amount: Math.round(total * 0.10 * 100) // 10% fee
   },
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: {
-              name: `Reservation Payment for Property #${propertyId}`,
-            },
-            unit_amount: Math.round(total * 100), // Stripe requires cents
-          },
-          quantity: 1,
+
+  metadata: {
+    reservationId: reservationId.toString(),
+    propertyPrice: propertyPrice.toString(),
+    serviceFee: serviceFee.toString()
+  },
+
+  line_items: [
+    {
+      price_data: {
+        currency: "usd",
+        product_data: {
+          name: `Reservation Payment for Property #${propertyId}`,
         },
-      ],
-      mode: "payment",
-      success_url: `${process.env.APP_BASE_URL}/payment-success`,
-      cancel_url: `${process.env.APP_BASE_URL}/payment-cancel`,
-    });
+        unit_amount: Math.round(total * 100), // Stripe requires cents
+      },
+      quantity: 1,
+    },
+  ],
+
+  mode: "payment",
+  success_url: `${process.env.APP_BASE_URL}/payment-success`,
+  cancel_url: `${process.env.APP_BASE_URL}/payment-cancel`,
+});
+
 
     // 7️⃣ Return session link
     return res.json({ id: session.id, url: session.url });
