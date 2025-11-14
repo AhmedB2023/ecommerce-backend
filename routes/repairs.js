@@ -540,52 +540,9 @@ console.log("💰 Payout released to provider:", transfer.id);
     res.status(500).json({ success: false, error: "Server error confirming completion" });
   }
 });
-// ✅ Create PaymentIntent (holds funds)
-router.post("/create-payment-intent/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // 1️⃣ Fetch repair request
-    const result = await pool.query(
-      `SELECT * FROM repair_requests WHERE id = $1`,
-      [id]
-    );
-    const repair = result.rows[0];
-    if (!repair) return res.status(404).json({ error: "Repair not found" });
-
-    // 2️⃣ Create PaymentIntent (hold payment)
-    const paymentIntent = await stripe.paymentIntents.create({
-  amount: Math.round(repair.price_quote * 100),
-  currency: "usd",
-
-  application_fee_amount: Math.round(repair.price_quote * 0.10 * 100),
-
-  transfer_data: {
-    destination: repair.provider_stripe_account,  // ⭐ SEND MONEY TO PROVIDER
-  },
-
-  automatic_payment_methods: { enabled: true },
-
-  metadata: {
-    repair_id: repair.id,
-    provider_account: repair.provider_stripe_account
-  }
-});
 
 
-    // 3️⃣ Save PaymentIntent ID
-    await pool.query(
-      `UPDATE repair_requests SET payment_intent_id = $1 WHERE id = $2`,
-      [paymentIntent.id, id]
-    );
-
-    res.json({ clientSecret: paymentIntent.client_secret });
-
-  } catch (err) {
-    console.error("❌ Error creating PaymentIntent", err);
-    res.status(500).json({ error: "Failed to create PaymentIntent" });
-  }
-});
+   
 
 
 
