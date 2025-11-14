@@ -174,10 +174,10 @@ router.post("/:id/quote", async (req, res) => {
         type: "express",
         email: provider_email,
         business_type: "individual",
-        capabilities: {
-          card_payments: { requested: true },
-          transfers: { requested: true }
-        }
+       capabilities: {
+  transfers: { requested: true }
+}
+
       });
 
       stripeAccountId = account.id;
