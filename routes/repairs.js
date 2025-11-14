@@ -170,15 +170,16 @@ router.post("/:id/quote", async (req, res) => {
     let stripeAccountId = repair.provider_stripe_account;
 
     if (!stripeAccountId) {
-      const account = await stripe.accounts.create({
-        type: "express",
-        email: provider_email,
-        business_type: "individual",
-       capabilities: {
-  transfers: { requested: true }
-}
+    const account = await stripe.accounts.create({
+  type: "express",
+  email: provider_email,
+  business_type: "individual",
+  capabilities: {
+    transfers: { requested: true },
+    card_payments: { requested: true }
+  }
+});
 
-      });
 
       stripeAccountId = account.id;
 
