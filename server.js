@@ -88,6 +88,17 @@ if (repairId && session.metadata?.repairType === "repair_request") {
     [repairId]
   );
   console.log(`✅ Repair request ${repairId} marked as paid (status + payment_status updated).`);
+// ⭐ Save the PaymentIntent ID so we can release money later
+const paymentIntentId = session.payment_intent;
+
+await pool.query(
+  `UPDATE repair_requests
+   SET payment_intent_id = $1
+   WHERE id = $2`,
+  [paymentIntentId, repairId]
+);
+
+console.log(`🧾 PaymentIntent ID saved for repair ${repairId}: ${paymentIntentId}`);
 
   // 🟢 Notify the provider about the paid repair
   const customerAddress = session.metadata.customerAddress;

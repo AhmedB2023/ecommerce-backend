@@ -472,12 +472,6 @@ router.post("/confirm-completion", async (req, res) => {
 
     const repair = rows[0];
 
-    if (repair.completion_status !== "provider_completed") {
-      return res.status(400).json({
-        success: false,
-        error: "Job not yet marked completed by provider",
-      });
-    }
 
     // 2️⃣ Update job status
     await pool.query(
@@ -486,6 +480,20 @@ router.post("/confirm-completion", async (req, res) => {
        WHERE job_code = $1`,
       [jobCode]
     );
+
+
+    // ⛔ If provider has no Stripe account yet, do NOT attempt payout
+if (!repair.provider_stripe_account) {
+  return res.json({
+    success: true,
+    message: "Job completed. Provider has not set up a payout account yet. Funds will be released when they onboard."
+  });
+}
+
+// check if provider has already been paid 
+if (repair.payout_released_at) {
+  return res.json({ success: false, message: "Already paid once." });
+}
 
 // 3️⃣ Release payout to provider (90%)
 const providerAmount = Math.round(repair.price_quote * 0.90 * 100);
@@ -500,6 +508,14 @@ const transfer = await stripe.transfers.create({
     type: "repair_payout"
   }
 });
+// 📝 Mark payout as released
+await pool.query(
+  `UPDATE repair_requests
+   SET payout_released_at = NOW()
+   WHERE id = $1`,
+  [repair.id]
+);
+
 
 console.log("💰 Payout released to provider:", transfer.id);
 
@@ -540,6 +556,67 @@ console.log("💰 Payout released to provider:", transfer.id);
     res.status(500).json({ success: false, error: "Server error confirming completion" });
   }
 });
+// Admin triggers payout after provider creates account
+router.post("/release-payment", async (req, res) => {
+  const { repairId } = req.body;
+
+  // 1. Fetch repair
+  const { rows } = await pool.query(
+    `SELECT * FROM repair_requests WHERE id = $1`,
+    [repairId]
+  );
+  const repair = rows[0];
+
+  // 2. Ensure provider now has a Stripe account
+  if (!repair.provider_stripe_account) {
+    return res.json({
+      success: false,
+      message: "Provider still does not have a Stripe account."
+    });
+  }
+
+  // ❗ Block payout if user didn't confirm yet
+if (repair.completion_status !== "user_confirmed") {
+  return res.json({
+    success: false,
+    message: "User has not confirmed completion yet."
+  });
+}
+
+  // check if provider has already been paid 
+if (repair.payout_released_at) {
+  return res.json({ success: false, message: "Already paid once." });
+}
+
+  // 3. Calculate payout
+  const providerAmount = Math.round(repair.price_quote * 0.90 * 100);
+
+  // 4. Release payout
+  const transfer = await stripe.transfers.create({
+    amount: providerAmount,
+    currency: "usd",
+    destination: repair.provider_stripe_account,
+    metadata: {
+      type: "repair_payout",
+      repair_id: repairId
+    }
+  });
+  // 📝 Mark payout as released
+await pool.query(
+  `UPDATE repair_requests
+   SET payout_released_at = NOW()
+   WHERE id = $1`,
+  [repair.id]
+);
+
+
+  res.json({
+    success: true,
+    message: "Payout released to provider.",
+    transferId: transfer.id
+  });
+});
+
 
 
    
