@@ -25,9 +25,7 @@ cloudinary.config({
 const bodyParser = require("body-parser");
 
 const Stripe = require('stripe');
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2025-05-28.basil"
-});
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
 const bcrypt = require('bcryptjs');
 
@@ -75,7 +73,8 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  if (event.type === "checkout.session.completed") {
+  if (event.type === "payment_intent.succeeded")
+ {
 
  const session = event.data.object;
     const repairId = session.metadata?.repairId;
