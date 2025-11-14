@@ -498,15 +498,17 @@ if (repair.payout_released_at) {
 // 3️⃣ Release payout to provider (90%)
 const providerAmount = Math.round(repair.price_quote * 0.90 * 100);
 
-const transfer = await stripe.paymentIntents.transfer(
-  repair.payment_intent_id,
-  {
-    amount: providerAmount,
-    transfer_data: {
-      destination: repair.provider_stripe_account
-    }
+const transfer = await stripe.transfers.create({
+  amount: providerAmount,
+  currency: "usd",
+  destination: repair.provider_stripe_account,
+  metadata: {
+    repair_id: repair.id,
+    job_code: repair.job_code,
+    type: "repair_payout"
   }
-);
+});
+
 
 // 📝 Mark payout as released
 await pool.query(
@@ -592,15 +594,16 @@ if (repair.payout_released_at) {
   const providerAmount = Math.round(repair.price_quote * 0.90 * 100);
 
   // 4. Release payout
-const transfer = await stripe.paymentIntents.transfer(
-  repair.payment_intent_id,
-  {
-    amount: providerAmount,
-    transfer_data: {
-      destination: repair.provider_stripe_account
-    }
+const transfer = await stripe.transfers.create({
+  amount: providerAmount,
+  currency: "usd",
+  destination: repair.provider_stripe_account,
+  metadata: {
+    repair_id: repair.id,
+    job_code: repair.job_code,
+    type: "repair_payout"
   }
-);
+});
 
   // 📝 Mark payout as released
 await pool.query(
