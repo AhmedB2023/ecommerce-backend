@@ -507,7 +507,9 @@ if (repair.payout_released_at) {
 }
 
 // 3️⃣ Release payout to provider (90%)
-const providerAmount = Math.round(repair.price_quote * 0.90 * 100);
+const final = Number(repair.final_price || repair.price_quote);
+const providerAmount = Math.round(final * 0.90 * 100);
+
 
 const transfer = await stripe.transfers.create({
   amount: providerAmount,
@@ -602,7 +604,9 @@ if (repair.payout_released_at) {
 }
 
   // 3. Calculate payout
-  const providerAmount = Math.round(repair.price_quote * 0.90 * 100);
+ const final = Number(repair.final_price || repair.price_quote);
+const providerAmount = Math.round(final * 0.90 * 100);
+
 
   // 4. Release payout
 const transfer = await stripe.transfers.create({
@@ -632,7 +636,147 @@ await pool.query(
   });
 });
 
+// ✅ Provider updates final price AFTER inspection
+router.post("/update-final-price", async (req, res) => {
+  try {
+    const { repairId, provider_email, final_price, materials_cost, reason } = req.body;
 
+    // 1️⃣ Validate input
+    if (!repairId || !provider_email || !final_price) {
+      return res.status(400).json({ success: false, error: "Missing fields" });
+    }
+
+    // 2️⃣ Ensure provider owns this job
+    const { rows } = await pool.query(
+      `SELECT * FROM repair_requests WHERE id = $1 AND provider_email = $2`,
+      [repairId, provider_email]
+    );
+
+    if (rows.length === 0) {
+      return res.status(403).json({ success: false, error: "Unauthorized" });
+    }
+
+    const repair = rows[0];
+
+    // 3️⃣ Update repair with new final price + materials
+    await pool.query(
+      `UPDATE repair_requests 
+       SET final_price = $1,
+           materials_cost = $2,
+           status = 'final_price_pending_user'
+       WHERE id = $3`,
+      [final_price, materials_cost || 0, repairId]
+    );
+
+    // 4️⃣ Notify the user
+    const requesterEmail = repair.requester_email;
+    if (requesterEmail) {
+      await sendRepairEmail(
+        requesterEmail,
+        `
+          <h3>Updated Quote for Your Repair</h3>
+
+          <p>The provider has updated the final price after inspection.</p>
+
+          <p><strong>Initial price:</strong> $${repair.price_quote}</p>
+          <p><strong>New final price:</strong> $${final_price}</p>
+          <p><strong>Materials cost:</strong> $${materials_cost || 0}</p>
+          <p><strong>Reason:</strong> ${reason || "Not provided"}</p>
+
+          <a href="${process.env.APP_BASE_URL}/accept-updated-price?repairId=${repairId}"
+             style="background:#28a745;color:white;padding:10px 16px;border-radius:6px;text-decoration:none;">
+             ✅ Accept Updated Price
+          </a>
+
+          <a href="${process.env.APP_BASE_URL}/reject-updated-price?repairId=${repairId}"
+             style="background:#dc3545;color:white;padding:10px 16px;border-radius:6px;text-decoration:none;margin-left:10px;">
+             ❌ Reject Updated Price
+          </a>
+        `
+      );
+    }
+
+    res.json({ success: true, message: "Final price updated and user notified." });
+
+  } catch (err) {
+    console.error("❌ Error updating final price:", err);
+    res.status(500).json({ success: false, error: "Server error" });
+  }
+});
+
+// ✅ Handle paying or refunding the difference
+router.get("/process-final-price/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // 1️⃣ Get repair details
+    const { rows } = await pool.query(
+      `SELECT price_quote, final_price, payment_intent_id 
+       FROM repair_requests WHERE id = $1`,
+      [id]
+    );
+
+    if (rows.length === 0) return res.status(404).send("Repair not found");
+
+    const repair = rows[0];
+    const initial = Number(repair.price_quote);
+    const final = Number(repair.final_price);
+
+    // 2️⃣ If final price is LOWER → refund difference
+    if (final < initial) {
+      const refundAmount = (initial - final) * 100; // cents
+
+      await stripe.refunds.create({
+        payment_intent: repair.payment_intent_id,
+        amount: refundAmount,
+      });
+
+      await pool.query(
+        `UPDATE repair_requests
+         SET status = 'final_price_paid'
+         WHERE id = $1`,
+        [id]
+      );
+
+      return res.send(
+        `Final price is lower. Refund of $${initial - final} has been sent.`
+      );
+    }
+
+    // 3️⃣ If final price is HIGHER → pay the difference on Stripe
+    if (final > initial) {
+      const difference = (final - initial) * 100;
+
+      // Create Stripe checkout ONLY for the difference
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        line_items: [
+          {
+            price_data: {
+              currency: "usd",
+              product_data: { name: "Additional Repair Charges" },
+              unit_amount: difference,
+            },
+            quantity: 1,
+          },
+        ],
+        mode: "payment",
+        success_url: `https://tajernow.com/payment-success?repairId=${id}`,
+        cancel_url: `https://tajernow.com/payment-cancelled`,
+        metadata: { repairId: id },
+      });
+
+      return res.redirect(session.url);
+    }
+
+    // 4️⃣ If final == initial
+    return res.send("No extra payment needed. Price remains the same.");
+
+  } catch (err) {
+    console.error("❌ Error processing final price:", err);
+    res.status(500).send("Server error");
+  }
+});
 
    
 
