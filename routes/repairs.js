@@ -345,7 +345,8 @@ router.get("/payments/start/:id", async (req, res) => {
           price_data: {
             currency: "usd",
             product_data: { name: `Repair: ${repair.description}` },
-            unit_amount: Math.round(repair.price_quote * 100),
+            unit_amount: Math.round((repair.final_price ?? repair.price_quote) * 100)
+,
           },
           quantity: 1,
         },
