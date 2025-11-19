@@ -26,115 +26,6 @@ const bodyParser = require("body-parser");
 
 
 
-const Stripe = require('stripe');
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
-
-const bcrypt = require('bcryptjs');
-
-const { v4: uuidv4 } = require('uuid');
-const crypto = require('crypto');
-const pool = require('./db');
-
-
-
-
-const sendResetEmail = require('./utils/sendEmail');
-
-const allowedOrigins = [
-  'https://tajernow.com',
-  'http://localhost:3000',
-  'https://ecommerce-backend-y3v4.onrender.com'
-];
-
-
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("CORS not allowed"));
-    }
-  },
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
-  allowedHeaders: "Content-Type,Authorization",
-  credentials: true,
-}));
-
-
-
-
-app.use(express.json());
-
-
-// ✅ Serve uploaded images statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-
-// ✅ Repair routes
-const repairRoutes = require("./routes/repairs");
-app.use("/api/repairs", repairRoutes);
-
-
-
-
-
-
-// 📧 Brevo setup
-const SibApiV3Sdk = require('sib-api-v3-sdk');
-const defaultClient = SibApiV3Sdk.ApiClient.instance;
-const apiKey = defaultClient.authentications['api-key'];
-apiKey.apiKey = process.env.BREVO_API_KEY;
-const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
-const sendEmail = require('./utils/sendEmail');
-
-
-
-
-const db = require('./db');
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-// ✅ Mount availability routes here
-const availabilityRoutes = require('./routes/availabilityRoutes');
-app.use('/api', availabilityRoutes);
-
-// ✅ Store images to /uploads folder with unique names
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/');
-  },
-  filename: function (req, file, cb) {
-    const uniqueName = Date.now() + '-' + file.originalname;
-    cb(null, uniqueName);
-  }
-});
-
-const upload = multer({ storage });
-
-
-// ✅ Add this line to mount the route
-const idUploadRoutes = require('./routes/idUpload');
-app.use('/api', idUploadRoutes);
-
-
-console.log("🔍 APP_BASE_URL from .env:", process.env.APP_BASE_URL);
-
-if (process.env.NODE_ENV !== 'production') {
-  require('dotenv').config();
-}
-
 
 
 app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
@@ -403,6 +294,121 @@ const result = await db.query(
 
   res.status(200).json({ received: true });
 });
+
+
+
+
+
+const Stripe = require('stripe');
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
+const bcrypt = require('bcryptjs');
+
+const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
+const pool = require('./db');
+
+
+
+
+const sendResetEmail = require('./utils/sendEmail');
+
+const allowedOrigins = [
+  'https://tajernow.com',
+  'http://localhost:3000',
+  'https://ecommerce-backend-y3v4.onrender.com'
+];
+
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS not allowed"));
+    }
+  },
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
+  allowedHeaders: "Content-Type,Authorization",
+  credentials: true,
+}));
+
+
+
+
+app.use(express.json());
+
+
+// ✅ Serve uploaded images statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+
+// ✅ Repair routes
+const repairRoutes = require("./routes/repairs");
+app.use("/api/repairs", repairRoutes);
+
+
+
+
+
+
+// 📧 Brevo setup
+const SibApiV3Sdk = require('sib-api-v3-sdk');
+const defaultClient = SibApiV3Sdk.ApiClient.instance;
+const apiKey = defaultClient.authentications['api-key'];
+apiKey.apiKey = process.env.BREVO_API_KEY;
+const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+const sendEmail = require('./utils/sendEmail');
+
+
+
+
+const db = require('./db');
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// ✅ Mount availability routes here
+const availabilityRoutes = require('./routes/availabilityRoutes');
+app.use('/api', availabilityRoutes);
+
+// ✅ Store images to /uploads folder with unique names
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/');
+  },
+  filename: function (req, file, cb) {
+    const uniqueName = Date.now() + '-' + file.originalname;
+    cb(null, uniqueName);
+  }
+});
+
+const upload = multer({ storage });
+
+
+// ✅ Add this line to mount the route
+const idUploadRoutes = require('./routes/idUpload');
+app.use('/api', idUploadRoutes);
+
+
+console.log("🔍 APP_BASE_URL from .env:", process.env.APP_BASE_URL);
+
+if (process.env.NODE_ENV !== 'production') {
+  require('dotenv').config();
+}
+
+
 
 
 
