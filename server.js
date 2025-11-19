@@ -100,6 +100,10 @@ if (event.type === "payment_intent.succeeded") {
     );
 
     const userEmail = result.rows[0]?.requester_email;
+    console.log("📨 Deposit email should go to:", userEmail);
+
+await tranEmailApi.sendTransacEmail({...});
+
 
     // Send email to user
     if (userEmail) {
