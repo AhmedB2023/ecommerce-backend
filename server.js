@@ -106,7 +106,7 @@ if (event.type === "payment_intent.succeeded") {
 
         // ⭐ Notify provider that the user has paid for the repair
 const providerRes = await pool.query(
-  `SELECT provider_email, description, address, preferred_time
+  `SELECT provider_email, description, customer_address, preferred_time
    FROM repair_requests WHERE id = $1`,
   [repairId]
 );
@@ -125,7 +125,7 @@ if (provider?.provider_email) {
       <p><strong>Repair Details:</strong></p>
       <ul>
         <li><b>Description:</b> ${provider.description}</li>
-        <li><b>Address:</b> ${provider.address}</li>
+        <li><b>Address:</b> ${provider.customer_address}</li>
         <li><b>Preferred Time:</b> ${provider.preferred_time}</li>
       </ul>
 
