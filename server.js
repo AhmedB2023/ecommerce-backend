@@ -73,6 +73,68 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, r
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
+
+  // 🔵 Deposit payment succeeded ($20)
+if (event.type === "payment_intent.succeeded") {
+  const intent = event.data.object;
+
+  // Only handle deposits
+  if (intent.metadata?.type === "deposit") {
+    const repairId = intent.metadata.repairId;
+
+    console.log(`💰 Deposit received for repair ${repairId}`);
+
+    // Update DB status
+    await pool.query(
+      `UPDATE repair_requests
+       SET status = 'deposit_paid',
+           payment_status = 'deposit_received'
+       WHERE id = $1`,
+      [repairId]
+    );
+
+    // Fetch user email
+    const result = await pool.query(
+      `SELECT requester_email FROM repair_requests WHERE id = $1`,
+      [repairId]
+    );
+
+    const userEmail = result.rows[0]?.requester_email;
+
+    // Send email to user
+    if (userEmail) {
+      await tranEmailApi.sendTransacEmail({
+        sender: { name: "Tajer", email: "support@tajernow.com" },
+        to: [{ email: userEmail }],
+        subject: "Your $20 Deposit Has Been Received",
+        htmlContent: `
+          <p>Hello,</p>
+          <p>Your <strong>$20 deposit</strong> has been successfully processed.</p>
+
+          <p><strong>Refund Policy:</strong></p>
+          <ul>
+            <li>$10 is a non-refundable booking fee.</li>
+            <li>$10 is refundable ONLY if the provider does not show up.</li>
+          </ul>
+
+          <p>Why do we keep a $10 booking fee?</p>
+          <p>
+            This fee protects you by guaranteeing a provider is reserved specifically
+            for your appointment time and helps prevent last-minute cancellations.
+          </p>
+
+          <p>Thank you for choosing Tajer.</p>
+        `
+      });
+
+      console.log(`📧 Deposit email sent to user: ${userEmail}`);
+    }
+
+    return res.status(200).send("Deposit handled");
+  }
+}
+
+
  if (event.type === "checkout.session.completed") {
 
 
