@@ -133,59 +133,6 @@ if (event.type === "payment_intent.succeeded") {
     return res.status(200).send("Deposit handled");
   }
 }
-if (event.type === "charge.succeeded") {
-  const charge = event.data.object;
-
-  // Only deposit payments have this metadata.type
-  if (charge.metadata?.type === "deposit") {
-    const repairId = charge.metadata.repairId;
-
-    console.log(`💰 Deposit (charge) succeeded for repair ${repairId}`);
-
-    // Update DB
-    await pool.query(
-      `UPDATE repair_requests
-       SET status = 'deposit_paid',
-           payment_status = 'deposit_received'
-       WHERE id = $1`,
-      [repairId]
-    );
-
-    // Fetch requester email
-    const result = await pool.query(
-      `SELECT requester_email FROM repair_requests WHERE id = $1`,
-      [repairId]
-    );
-
-    const userEmail = result.rows[0]?.requester_email;
-
-    if (userEmail) {
-      await tranEmailApi.sendTransacEmail({
-        sender: { name: "Tajer", email: "support@tajernow.com" },
-        to: [{ email: userEmail }],
-        subject: "Your $20 Deposit Has Been Received",
-        htmlContent: `
-          <p>Hello,</p>
-          <p>Your <strong>$20 deposit</strong> has been successfully processed.</p>
-
-          <p><strong>Refund Policy:</strong></p>
-          <ul>
-            <li>$10 non-refundable booking fee</li>
-            <li>$10 refundable only if provider does NOT show up</li>
-          </ul>
-
-          <p>Thank you for choosing Tajer.</p>
-        `
-      });
-
-      console.log(`📧 Deposit email sent to: ${userEmail}`);
-    }
-
-    return res.status(200).send("Deposit handled");
-  }
-}
-
-
 
 
 
