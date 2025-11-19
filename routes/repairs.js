@@ -682,79 +682,7 @@ router.post("/update-final-price", async (req, res) => {
   }
 });
 
-// ✅ Handle paying or refunding the difference
-router.get("/process-final-price/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
 
-    // 1️⃣ Get repair details
-    const { rows } = await pool.query(
-      `SELECT price_quote, final_price, payment_intent_id 
-       FROM repair_requests WHERE id = $1`,
-      [id]
-    );
-
-    if (rows.length === 0) return res.status(404).send("Repair not found");
-
-    const repair = rows[0];
-    const initial = Number(repair.price_quote);
-    const final = Number(repair.final_price);
-
-    // 2️⃣ If final price is LOWER → refund difference
-    if (final < initial) {
-      const refundAmount = (initial - final) * 100; // cents
-
-      await stripe.refunds.create({
-        payment_intent: repair.payment_intent_id,
-        amount: refundAmount,
-      });
-
-      await pool.query(
-        `UPDATE repair_requests
-         SET status = 'final_price_paid'
-         WHERE id = $1`,
-        [id]
-      );
-
-      return res.send(
-        `Final price is lower. Refund of $${initial - final} has been sent.`
-      );
-    }
-
-    // 3️⃣ If final price is HIGHER → pay the difference on Stripe
-    if (final > initial) {
-      const difference = (final - initial) * 100;
-
-      // Create Stripe checkout ONLY for the difference
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            price_data: {
-              currency: "usd",
-              product_data: { name: "Additional Repair Charges" },
-              unit_amount: difference,
-            },
-            quantity: 1,
-          },
-        ],
-        mode: "payment",
-        success_url: `https://tajernow.com/payment-success?repairId=${id}`,
-        cancel_url: `https://tajernow.com/payment-cancelled`,
-        metadata: { repairId: id },
-      });
-
-      return res.redirect(session.url);
-    }
-
-    // 4️⃣ If final == initial
-    return res.send("No extra payment needed. Price remains the same.");
-
-  } catch (err) {
-    console.error("❌ Error processing final price:", err);
-    res.status(500).send("Server error");
-  }
-});
 
    
 
