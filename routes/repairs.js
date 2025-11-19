@@ -312,66 +312,43 @@ router.get("/:id/reject", async (req, res) => {
 
 
 
-// ✅ Accept quote and redirect to Stripe
-router.get("/payments/start/:id", async (req, res) => {
+// ✅ Accept quote and charge $20 deposit ONLY
+router.post("/payments/start/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    console.log("🚀 /payments/start called with ID:", id);
+    console.log("🚀 /payments/start (deposit) called with ID:", id);
 
-    // 1️⃣ Fetch repair details
-    const result = await pool.query(
-      `SELECT description, price_quote, requester_email, customer_address, preferred_time 
-       FROM repair_requests 
-       WHERE id = $1`,
-      [id]
-    );
-    const repair = result.rows[0];
-    if (!repair) return res.status(404).send("Repair request not found.");
-
-    // 2️⃣ Update status before redirect
+    // 1️⃣ Update status to show deposit is needed
     await pool.query(
       `UPDATE repair_requests
-       SET status = 'accepted_pending_payment'
+       SET status = 'accepted_pending_deposit'
        WHERE id = $1`,
       [id]
     );
 
-    // 3️⃣ Create Stripe Checkout session
-    const session = await stripe.checkout.sessions.create({
+    // 2️⃣ Create $20 deposit PaymentIntent (CHARGE NOW)
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: 2000,             // $20 deposit
+      currency: "usd",
+      capture_method: "automatic", // Charge immediately
       payment_method_types: ["card"],
-      customer_email: repair.requester_email,
-      line_items: [
-        {
-          price_data: {
-            currency: "usd",
-            product_data: { name: `Repair: ${repair.description}` },
-            unit_amount: Math.round((repair.final_price ?? repair.price_quote) * 100)
-,
-          },
-          quantity: 1,
-        },
-      ],
-      mode: "payment",
-      success_url: `https://tajernow.com/payment-success?repairId=${id}`,
-      cancel_url: `https://tajernow.com/payment-cancelled`,
-
-      // ✅ Include all key info for webhook/provider email
-      metadata: { 
-        repairId: id.toString(), 
-        repairType: "repair_request",
-        customerAddress: repair.customer_address || "",
-        preferredTime: repair.preferred_time || ""
+      metadata: {
+        repairId: id.toString(),
+        type: "deposit"
       },
     });
 
-    console.log("💳 Stripe session created:", session.url);
+    console.log("💳 Deposit PaymentIntent created:", paymentIntent.id);
 
-    // 4️⃣ Return Stripe URL to frontend
-    res.json({ url: session.url });
+    // 3️⃣ Send clientSecret back to frontend
+    res.json({
+      clientSecret: paymentIntent.client_secret,
+      paymentIntentId: paymentIntent.id
+    });
 
   } catch (err) {
-    console.error("Error starting repair payment:", err.message);
-    res.status(500).send("Failed to start repair payment.");
+    console.error("❌ Deposit creation error:", err.message);
+    res.status(500).json({ error: "Failed to start deposit payment." });
   }
 });
 
