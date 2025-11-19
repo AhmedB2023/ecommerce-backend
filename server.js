@@ -104,6 +104,40 @@ if (event.type === "payment_intent.succeeded") {
       console.log(`📧 Deposit email sent to user: ${userEmail}`);
     }
 
+        // ⭐ Notify provider that the user has paid for the repair
+const providerRes = await pool.query(
+  `SELECT provider_email, description, address, preferred_time
+   FROM repair_requests WHERE id = $1`,
+  [repairId]
+);
+
+const provider = providerRes.rows[0];
+
+if (provider?.provider_email) {
+  await tranEmailApi.sendTransacEmail({
+    sender: { name: "Tajer", email: "support@tajernow.com" },
+    to: [{ email: provider.provider_email }],
+    subject: "Customer Payment Received – Repair Job Confirmed",
+    htmlContent: `
+      <p>Hello,</p>
+      <p>The user has <strong>paid for the repair</strong>. The job is now confirmed and assigned to you.</p>
+
+      <p><strong>Repair Details:</strong></p>
+      <ul>
+        <li><b>Description:</b> ${provider.description}</li>
+        <li><b>Address:</b> ${provider.address}</li>
+        <li><b>Preferred Time:</b> ${provider.preferred_time}</li>
+      </ul>
+
+      <p>Please proceed to the customer's location at the scheduled time.</p>
+
+      <p>— The Tajer Team</p>
+    `
+  });
+
+  console.log(`📧 Provider notified that user paid for repair ${repairId}`);
+}
+
 
 
 
