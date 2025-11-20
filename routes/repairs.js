@@ -331,21 +331,28 @@ router.post("/payments/start/:id", async (req, res) => {
 
     // 3️⃣ Create $20 deposit PaymentIntent (CHARGE NOW)
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: 2000,               // $20 deposit
+      amount: 2000,               // $20
       currency: "usd",
-      capture_method: "automatic",
+      customer: customer.id,      // ⭐ attach customer
       payment_method_types: ["card"],
-      customer: customer.id,      // ⭐ ATTACH CUSTOMER
-      setup_future_usage: "off_session", // ⭐ SAVE CARD FOR LATER
+
+      // ⭐ REQUIRED FOR SAVING PAYMENT METHOD IN 2025 API VERSION
+      setup_future_usage: "off_session",
+      payment_method_options: {
+        card: {
+          setup_future_usage: "off_session"
+        }
+      },
+
       metadata: {
         repairId: id.toString(),
         type: "deposit"
-      },
+      }
     });
 
     console.log("💳 Deposit PaymentIntent created:", paymentIntent.id);
 
-    // 4️⃣ Save only the Stripe customer in DB
+    // 4️⃣ Save customer (payment method saved later)
     await pool.query(
       `UPDATE repair_requests
        SET customer_id = $1
@@ -470,6 +477,13 @@ router.post("/confirm-completion", async (req, res) => {
 
     const repair = rows[0];
 
+    if (!repair.payment_method_id) {
+      return res.status(400).json({
+        success: false,
+        error: "Missing saved payment method — user never completed deposit"
+      });
+    }
+
     // 2️⃣ Calculate remaining charge
     const remaining = Number(repair.price_quote) - 20;
     const chargeAmount = Math.round(remaining * 100);
@@ -479,14 +493,14 @@ router.post("/confirm-completion", async (req, res) => {
       amount: chargeAmount,
       currency: "usd",
       customer: repair.customer_id,
-      payment_method: repair.payment_method_id,
+      payment_method: repair.payment_method_id, // now valid
       off_session: true,
       confirm: true
     });
 
     // 4️⃣ Update db
     await pool.query(
-      `UPDATE repair_requests 
+      `UPDATE repair_requests
        SET completion_status = 'user_confirmed',
            payment_status = 'final_paid',
            status = 'completed'
