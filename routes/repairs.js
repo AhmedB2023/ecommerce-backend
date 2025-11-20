@@ -332,6 +332,7 @@ router.post("/payments/start/:id", async (req, res) => {
       currency: "usd",
       capture_method: "automatic", // Charge immediately
       payment_method_types: ["card"],
+      setup_future_usage: "off_session",
       metadata: {
         repairId: id.toString(),
         type: "deposit"
