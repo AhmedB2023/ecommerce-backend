@@ -362,7 +362,7 @@ const email = req.body.email?.trim().toLowerCase();
   try {
     const result = await pool.query(
   `SELECT id, job_code, description, status, payment_status, completion_status,
-          requester_email, provider_email
+          requester_email, provider_email, price_quote
    FROM repair_requests
    WHERE job_code = $1`,
   [jobCode]
