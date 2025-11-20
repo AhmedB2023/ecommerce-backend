@@ -339,6 +339,14 @@ router.post("/payments/start/:id", async (req, res) => {
       },
     });
 
+     // ⭐ Save customer + payment method for later auto-charge
+    await pool.query(
+      `UPDATE repair_requests
+       SET customer_id = $1, payment_method_id = $2
+       WHERE id = $3`,
+      [paymentIntent.customer, paymentIntent.payment_method, id]
+    );
+
     console.log("💳 Deposit PaymentIntent created:", paymentIntent.id);
 
     // 3️⃣ Send clientSecret back to frontend
