@@ -638,6 +638,22 @@ router.post("/update-final-price", async (req, res) => {
 });
 
 
+// ⭐ Save payment method after deposit succeeds
+router.post("/save-payment-method", async (req, res) => {
+  const { repairId, customerId, paymentMethodId } = req.body;
+
+  await pool.query(
+    `UPDATE repair_requests
+     SET customer_id = $1,
+         payment_method_id = $2
+     WHERE id = $3`,
+    [customerId, paymentMethodId, repairId]
+  );
+
+  res.json({ success: true });
+});
+
+
 
    
 
