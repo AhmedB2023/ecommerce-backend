@@ -445,110 +445,56 @@ router.post("/mark-completed", async (req, res) => {
 router.post("/confirm-completion", async (req, res) => {
   const { jobCode, email } = req.body;
 
-  if (!jobCode || !email) {
-    return res.status(400).json({ success: false, error: "Missing job code or email" });
-  }
-
   try {
-    // 1️⃣ Verify the job
-   const { rows } = await pool.query(
-  `SELECT * FROM repair_requests WHERE job_code = $1 AND requester_email = $2`,
-  [jobCode, email]
-);
+    // 1️⃣ Verify job
+    const { rows } = await pool.query(
+      `SELECT * FROM repair_requests WHERE job_code = $1 AND requester_email = $2`,
+      [jobCode, email]
+    );
 
     if (rows.length === 0)
-      return res.status(404).json({ success: false, error: "Repair not found or unauthorized" });
+      return res.status(404).json({ success: false, error: "Not found" });
 
     const repair = rows[0];
 
+    // 2️⃣ Calculate remaining charge
+    const remaining = Number(repair.price_quote) - 20;
+    const chargeAmount = Math.round(remaining * 100);
 
-    // 2️⃣ Update job status
+    // 3️⃣ Charge remaining amount
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: chargeAmount,
+      currency: "usd",
+      customer: repair.customer_id,
+      payment_method: repair.payment_method_id,
+      off_session: true,
+      confirm: true
+    });
+
+    // 4️⃣ Update db
     await pool.query(
       `UPDATE repair_requests 
-       SET completion_status = 'user_confirmed', status = 'completed' 
+       SET completion_status = 'user_confirmed',
+           payment_status = 'final_paid',
+           status = 'completed'
        WHERE job_code = $1`,
       [jobCode]
     );
 
-
-    // ⛔ If provider has no Stripe account yet, do NOT attempt payout
-if (!repair.provider_stripe_account) {
-  return res.json({
-    success: true,
-    message: "Job completed. Provider has not set up a payout account yet. Funds will be released when they onboard."
-  });
-}
-
-// check if provider has already been paid 
-if (repair.payout_released_at) {
-  return res.json({ success: false, message: "Already paid once." });
-}
-
-// 3️⃣ Release payout to provider (90%)
-const final = Number(repair.final_price || repair.price_quote);
-const providerAmount = Math.round(final * 0.90 * 100);
-
-
-const transfer = await stripe.transfers.create({
-  amount: providerAmount,
-  currency: "usd",
-  destination: repair.provider_stripe_account,
-  metadata: {
-    repair_id: repair.id,
-    job_code: repair.job_code,
-    type: "repair_payout"
-  }
-});
-
-
-// 📝 Mark payout as released
-await pool.query(
-  `UPDATE repair_requests
-   SET payout_released_at = NOW()
-   WHERE id = $1`,
-  [repair.id]
-);
-
-
-console.log("💰 Payout released to provider:", transfer.id);
-
-    // 4️⃣ Send email notifications
-    const subjectProvider = "💰 Payment Released - Job Completed";
-    const bodyProvider = `
-      Hi ${repair.provider_name || "Provider"},
-      <br><br>
-      The user has confirmed that the job <strong>${repair.description}</strong> is complete.
-      <br>Your payment has been released to your Stripe account.
-      <br><br>
-      Thank you for providing excellent service!<br>
-      <strong>- Repair Platform Team</strong>
-    `;
-
-    const subjectUser = "✅ Job Completion Confirmed";
-    const bodyUser = `
-      Hi ${repair.customer_name || "Customer"},
-      <br><br>
-      Thank you for confirming the completion of your repair job:
-      <strong>${repair.description}</strong>.
-      <br>Your payment has been successfully released to the provider.
-      <br><br>
-      We appreciate your trust in our platform.<br>
-      <strong>- Repair Platform Team</strong>
-    `;
-
-    await sendRepairEmail(repair.provider_email, subjectProvider, bodyProvider);
-   await sendRepairEmail(repair.requester_email, subjectUser, bodyUser);
-
-
     res.json({
       success: true,
-      message: "✅ Completion confirmed, payment released, and emails sent to both parties.",
+      message: "Final payment charged and job completed."
     });
+
   } catch (err) {
     console.error("❌ Error in confirm-completion:", err);
-    res.status(500).json({ success: false, error: "Server error confirming completion" });
+    res.status(500).json({ success: false, error: "Server error" });
   }
 });
+
+
+
+
 // Admin triggers payout after provider creates account
 router.post("/release-payment", async (req, res) => {
   const { repairId } = req.body;
