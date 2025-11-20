@@ -326,30 +326,34 @@ router.post("/payments/start/:id", async (req, res) => {
       [id]
     );
 
-    // 2️⃣ Create $20 deposit PaymentIntent (CHARGE NOW)
+    // 2️⃣ Create Stripe customer (⭐ REQUIRED)
+    const customer = await stripe.customers.create({});
+
+    // 3️⃣ Create $20 deposit PaymentIntent (CHARGE NOW)
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: 2000,             // $20 deposit
+      amount: 2000,               // $20 deposit
       currency: "usd",
-      capture_method: "automatic", // Charge immediately
+      capture_method: "automatic",
       payment_method_types: ["card"],
-      setup_future_usage: "off_session",
+      customer: customer.id,      // ⭐ ATTACH CUSTOMER
+      setup_future_usage: "off_session", // ⭐ SAVE CARD FOR LATER
       metadata: {
         repairId: id.toString(),
         type: "deposit"
       },
     });
 
- // ⭐ Save customer ONLY (payment method is NOT available here)
-await pool.query(
-  `UPDATE repair_requests
-   SET customer_id = $1
-   WHERE id = $2`,
-  [paymentIntent.customer, id]
-);
-
     console.log("💳 Deposit PaymentIntent created:", paymentIntent.id);
 
-    // 3️⃣ Send clientSecret back to frontend
+    // 4️⃣ Save only the Stripe customer in DB
+    await pool.query(
+      `UPDATE repair_requests
+       SET customer_id = $1
+       WHERE id = $2`,
+      [customer.id, id]
+    );
+
+    // 5️⃣ Send clientSecret back to frontend
     res.json({
       clientSecret: paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id
