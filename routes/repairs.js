@@ -520,6 +520,7 @@ console.log("🧪 providerAccount =", providerAccount);
   customer: repair.customer_id,
   payment_method: repair.payment_method_id,
   off_session: true,
+  transfer_data: { destination: providerAccount }, 
 
   application_fee_amount: Math.round(repair.price_quote * 0.10 * 100),
 
