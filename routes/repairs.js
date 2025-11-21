@@ -512,6 +512,7 @@ if (!providerAccount) {
   );
 }
 
+console.log("🧪 providerAccount =", providerAccount);
 
   const paymentIntent = await stripe.paymentIntents.create({
   amount: chargeAmount,
