@@ -184,9 +184,9 @@ const existing = await pool.query(
 );
 
 if (existing.rows.length > 0) {
-  // Provider already has an account → reuse it
-  providerStripeAccountId = existing.rows[0].provider_stripe_account;
+  stripeAccountId = existing.rows[0].provider_stripe_account; // correct variable
 }
+
 
  const account = await stripe.accounts.create({
   type: "express",
@@ -478,7 +478,6 @@ router.post("/confirm-completion", async (req, res) => {
 
     const repair = rows[0];
 
-
     if (!repair.payment_method_id) {
       return res.status(400).json({
         success: false,
@@ -490,49 +489,65 @@ router.post("/confirm-completion", async (req, res) => {
     const remaining = Number(repair.price_quote) - 20;
     const chargeAmount = Math.round(remaining * 100);
 
+    // 3️⃣ Ensure provider has a Stripe account
+    let providerAccount = repair.provider_stripe_account;
 
-    // If provider has no Stripe account → auto-create one so platform fee can be taken instantly
-let providerAccount = repair.provider_stripe_account;
+    if (!providerAccount) {
+      const account = await stripe.accounts.create({
+        type: "express",
+        capabilities: {
+          card_payments: { requested: true },
+          transfers: { requested: true },
+          payouts: { requested: true }   // ⭐ Added for 2025 Stripe
+        }
+      });
 
-if (!providerAccount) {
-  const account = await stripe.accounts.create({
-    type: "express",
-    capabilities: {
-      card_payments: { requested: true },
-      transfers: { requested: true }
+      providerAccount = account.id;
+
+      await pool.query(
+        `UPDATE repair_requests 
+         SET provider_stripe_account = $1 
+         WHERE id = $2`,
+        [providerAccount, repair.id]
+      );
     }
-  });
 
-  providerAccount = account.id;
+    console.log("🧪 providerAccount =", providerAccount);
 
-  await pool.query(
-    `UPDATE repair_requests 
-     SET provider_stripe_account = $1 
-     WHERE id = $2`,
-    [providerAccount, repair.id]
-  );
-}
+    // ⭐ Step 2: Check provider capabilities BEFORE final charge
+    const account = await stripe.accounts.retrieve(providerAccount);
 
-console.log("🧪 providerAccount =", providerAccount);
-const paymentIntent = await stripe.paymentIntents.create({
-  amount: chargeAmount,
-  currency: "usd",
-  customer: repair.customer_id,
-  payment_method: repair.payment_method_id,
-  off_session: true,
+    if (
+      account.capabilities?.transfers !== "active" ||
+      account.capabilities?.card_payments !== "active" ||
+      account.capabilities?.payouts !== "active"
+    ) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "Your provider hasn't completed payout setup yet. Please ask them to finish their Stripe onboarding so we can release the final payment."
+      });
+    }
 
-  application_fee_amount: Math.round(repair.price_quote * 0.10 * 100),
+    // 4️⃣ Final charge
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: chargeAmount,
+      currency: "usd",
+      customer: repair.customer_id,
+      payment_method: repair.payment_method_id,
+      off_session: true,
 
-  transfer_data: {
-    destination: providerAccount
-  },
+      application_fee_amount: Math.round(repair.price_quote * 0.10 * 100),
 
-  on_behalf_of: providerAccount,
-  confirm: true
-});
+      transfer_data: {
+        destination: providerAccount
+      },
 
+      on_behalf_of: providerAccount,
+      confirm: true
+    });
 
-    // 4️⃣ Update db
+    // 5️⃣ Update db
     await pool.query(
       `UPDATE repair_requests
        SET completion_status = 'user_confirmed',
@@ -552,6 +567,7 @@ const paymentIntent = await stripe.paymentIntents.create({
     res.status(500).json({ success: false, error: "Server error" });
   }
 });
+
 
 
 
