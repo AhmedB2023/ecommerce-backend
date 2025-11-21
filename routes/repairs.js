@@ -478,13 +478,6 @@ router.post("/confirm-completion", async (req, res) => {
 
     const repair = rows[0];
 
-     if (!repair.provider_stripe_account) {
-      return res.json({
-        success: false,
-        message: "Provider must create a Stripe account before payout.",
-        needsStripeOnboarding: true
-      });
-    }
 
     if (!repair.payment_method_id) {
       return res.status(400).json({
