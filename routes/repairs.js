@@ -514,16 +514,18 @@ if (!providerAccount) {
 }
 
 console.log("🧪 providerAccount =", providerAccount);
-
-  const paymentIntent = await stripe.paymentIntents.create({
+const paymentIntent = await stripe.paymentIntents.create({
   amount: chargeAmount,
   currency: "usd",
   customer: repair.customer_id,
   payment_method: repair.payment_method_id,
   off_session: true,
-  
 
   application_fee_amount: Math.round(repair.price_quote * 0.10 * 100),
+
+  transfer_data: {
+    destination: providerAccount
+  },
 
   on_behalf_of: providerAccount,
   confirm: true
