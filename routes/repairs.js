@@ -489,15 +489,18 @@ router.post("/confirm-completion", async (req, res) => {
     const remaining = Number(repair.price_quote) - 20;
     const chargeAmount = Math.round(remaining * 100);
 
-    // 3️⃣ Charge remaining amount
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: chargeAmount,
-      currency: "usd",
-      customer: repair.customer_id,
-      payment_method: repair.payment_method_id, // now valid
-      off_session: true,
-      confirm: true
-    });
+  const paymentIntent = await stripe.paymentIntents.create({
+  amount: chargeAmount,
+  currency: "usd",
+  customer: repair.customer_id,
+  payment_method: repair.payment_method_id,
+  off_session: true,
+
+  transfer_data: { destination: repair.provider_stripe_account },
+  application_fee_amount: Math.round(repair.price_quote * 0.10 * 100),
+
+  confirm: true
+});
 
     // 4️⃣ Update db
     await pool.query(
