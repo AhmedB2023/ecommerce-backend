@@ -363,7 +363,8 @@ router.post("/payments/start/:id", async (req, res) => {
     // 5️⃣ Send clientSecret back to frontend
     res.json({
       clientSecret: paymentIntent.client_secret,
-      paymentIntentId: paymentIntent.id
+      paymentIntentId: paymentIntent.id,
+      customerId: customer.id    // ⭐ ADD THIS
     });
 
   } catch (err) {
