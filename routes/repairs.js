@@ -490,13 +490,36 @@ router.post("/confirm-completion", async (req, res) => {
     const remaining = Number(repair.price_quote) - 20;
     const chargeAmount = Math.round(remaining * 100);
 
+
+    // If provider has no Stripe account → auto-create one so platform fee can be taken instantly
+let providerAccount = repair.provider_stripe_account;
+
+if (!providerAccount) {
+  const account = await stripe.accounts.create({
+    type: "express",
+    capabilities: {
+      transfers: { requested: true }
+    }
+  });
+
+  providerAccount = account.id;
+
+  await pool.query(
+    `UPDATE repair_requests 
+     SET provider_stripe_account = $1 
+     WHERE id = $2`,
+    [providerAccount, repair.id]
+  );
+}
+
+
   const paymentIntent = await stripe.paymentIntents.create({
   amount: chargeAmount,
   currency: "usd",
   customer: repair.customer_id,
   payment_method: repair.payment_method_id,
   off_session: true,
-
+ transfer_data: { destination: providerAccount }, 
   
   application_fee_amount: Math.round(repair.price_quote * 0.10 * 100),
 
