@@ -519,12 +519,13 @@ if (!providerAccount) {
   customer: repair.customer_id,
   payment_method: repair.payment_method_id,
   off_session: true,
- transfer_data: { destination: providerAccount }, 
-  
+
   application_fee_amount: Math.round(repair.price_quote * 0.10 * 100),
 
+  on_behalf_of: providerAccount,
   confirm: true
 });
+
 
     // 4️⃣ Update db
     await pool.query(
