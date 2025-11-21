@@ -53,6 +53,22 @@ if (event.type === "payment_intent.succeeded") {
 
     console.log(`💰 Deposit received for repair ${repairId}`);
 
+    // ⭐ Save customer's default payment method for later final charge
+    const paymentMethodId = intent.payment_method;
+    const customerId = intent.customer;
+
+    await pool.query(
+      `UPDATE repair_requests
+       SET payment_method_id = $1,
+           customer_id = $2
+       WHERE id = $3`,
+      [paymentMethodId, customerId, repairId]
+    );
+
+    console.log("💾 Saved card for future payment:", paymentMethodId);
+
+
+
     // Update DB status
     await pool.query(
       `UPDATE repair_requests
