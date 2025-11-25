@@ -214,8 +214,8 @@ if (existing.rows.length > 0) {
 
       const accountLink = await stripe.accountLinks.create({
         account: stripeAccountId,
-        refresh_url: "https://tajernow.com/reauth",
-        return_url: "https://tajernow.com/stripe-success",
+        refresh_url: "https://tajernow.com/",
+        return_url: "https://tajernow.com/",
         type: "account_onboarding",
       });
 
