@@ -472,11 +472,14 @@ router.post("/confirm-completion", async (req, res) => {
       `SELECT * FROM repair_requests WHERE job_code = $1 AND requester_email = $2`,
       [jobCode, email]
     );
+    
+
 
     if (rows.length === 0)
       return res.status(404).json({ success: false, error: "Not found" });
 
     const repair = rows[0];
+    const hasStripe = !!repair.provider_stripe_account;
 
     if (!repair.payment_method_id) {
       return res.status(400).json({
@@ -489,22 +492,23 @@ router.post("/confirm-completion", async (req, res) => {
     const remaining = Number(repair.price_quote) - 20;
     const chargeAmount = Math.round(remaining * 100);
 
-    // 3️⃣ Charge customer FULL AMOUNT → money goes to platform
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: chargeAmount,
-      currency: "usd",
-      customer: repair.customer_id,
-      payment_method: repair.payment_method_id,
-      off_session: true,
+let paymentIntentData = {
+  amount: chargeAmount,
+  currency: "usd",
+  customer: repair.customer_id,
+  payment_method: repair.payment_method_id,
+  off_session: true,
+  confirm: true
+};
 
-      // Platform takes 10% immediately
-      application_fee_amount: Math.round(repair.price_quote * 0.10 * 100),
+if (hasStripe) {
+  paymentIntentData.application_fee_amount = Math.round(repair.price_quote * 0.10 * 100);
+  paymentIntentData.transfer_data = {
+    destination: repair.provider_stripe_account
+  };
+}
+const paymentIntent = await stripe.paymentIntents.create(paymentIntentData);
 
-      // ❗ NO transfer_data
-      // ❗ NO on_behalf_of
-
-      confirm: true
-    });
 
     // 4️⃣ Update db
     await pool.query(
