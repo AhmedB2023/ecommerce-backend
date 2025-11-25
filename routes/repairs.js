@@ -500,6 +500,10 @@ let paymentIntentData = {
   off_session: true,
   confirm: true
 };
+if (!repair.customer_id) {
+  delete paymentIntentData.customer;
+}
+
 
 if (hasStripe) {
   paymentIntentData.application_fee_amount = Math.round(repair.price_quote * 0.10 * 100);
