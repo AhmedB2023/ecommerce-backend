@@ -469,11 +469,10 @@ router.post("/confirm-completion", async (req, res) => {
   try {
     // 1️⃣ Verify job
     const { rows } = await pool.query(
-      `SELECT * FROM repair_requests WHERE job_code = $1 AND requester_email = $2`,
+      `SELECT * FROM repair_requests 
+       WHERE job_code = $1 AND requester_email = $2`,
       [jobCode, email]
     );
-    
-
 
     if (rows.length === 0)
       return res.status(404).json({ success: false, error: "Not found" });
@@ -492,29 +491,41 @@ router.post("/confirm-completion", async (req, res) => {
     const remaining = Number(repair.price_quote) - 20;
     const chargeAmount = Math.round(remaining * 100);
 
-let paymentIntentData = {
-  amount: chargeAmount,
-  currency: "usd",
-  customer: repair.customer_id,
-  payment_method: repair.payment_method_id,
-  off_session: true,
-  confirm: true
-};
-if (!repair.customer_id) {
-  delete paymentIntentData.customer;
-}
+    // 3️⃣ Base PaymentIntent structure
+    let paymentIntentData = {
+      amount: chargeAmount,
+      currency: "usd",
+      customer: repair.customer_id,        // may be deleted below
+      payment_method: repair.payment_method_id,
+      off_session: true,
+      confirm: true
+    };
 
+    // 🛑 Remove empty customer_id (prevents Stripe error)
+    if (!repair.customer_id) {
+      delete paymentIntentData.customer;
+    }
 
-if (hasStripe) {
-  paymentIntentData.application_fee_amount = Math.round(repair.price_quote * 0.10 * 100);
-  paymentIntentData.transfer_data = {
-    destination: repair.provider_stripe_account
-  };
-}
-const paymentIntent = await stripe.paymentIntents.create(paymentIntentData);
+    // 4️⃣ Check Stripe capabilities (only if provider has account)
+    let transfersActive = false;
 
+    if (hasStripe) {
+      const acct = await stripe.accounts.retrieve(repair.provider_stripe_account);
+      transfersActive = acct.capabilities?.transfers === "active";
+    }
 
-    // 4️⃣ Update db
+    // 5️⃣ Only apply fee + transfer when fully allowed
+    if (transfersActive) {
+      paymentIntentData.application_fee_amount = Math.round(repair.price_quote * 0.10 * 100);
+      paymentIntentData.transfer_data = {
+        destination: repair.provider_stripe_account
+      };
+    }
+
+    // 6️⃣ Create PaymentIntent
+    const paymentIntent = await stripe.paymentIntents.create(paymentIntentData);
+
+    // 7️⃣ Update db
     await pool.query(
       `UPDATE repair_requests
        SET completion_status = 'user_confirmed',
