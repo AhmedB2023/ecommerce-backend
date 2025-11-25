@@ -573,20 +573,20 @@ router.post("/release-payment", async (req, res) => {
       });
     }
 
-    // 3️⃣ Provider MUST have completed onboarding
-    const account = await stripe.accounts.retrieve(repair.provider_stripe_account);
+    // 3️⃣ Check Stripe Connect account capability
+    const account = await stripe.accounts.retrieve(
+      repair.provider_stripe_account
+    );
 
-    if (
-      account.capabilities?.transfers !== "active" ||
-      account.capabilities?.payouts !== "active"
-    ) {
+    // ⭐ EXPRESS accounts only require transfers to be active
+    if (account.capabilities?.transfers !== "active") {
       return res.json({
         success: false,
         message: "Provider has not finished onboarding yet."
       });
     }
 
-    // 4️⃣ Block payout until user confirms
+    // 4️⃣ Block payout until user confirms completion
     if (repair.completion_status !== "user_confirmed") {
       return res.json({
         success: false,
@@ -599,7 +599,7 @@ router.post("/release-payment", async (req, res) => {
       return res.json({ success: false, message: "Already paid once." });
     }
 
-    // 6️⃣ Calculate provider payout (90%)
+    // 6️⃣ Calculate payout
     const final = Number(repair.final_price || repair.price_quote);
     const providerAmount = Math.round(final * 0.90 * 100);
 
@@ -634,6 +634,7 @@ router.post("/release-payment", async (req, res) => {
     res.json({ success: false, message: "Server error" });
   }
 });
+
 
 
 // ✅ Provider updates final price AFTER inspection
