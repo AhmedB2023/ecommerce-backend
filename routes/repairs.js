@@ -178,6 +178,7 @@ router.post("/:id/quote", async (req, res) => {
 router.get("/:id/accept", async (req, res) => {
   try {
     const { id } = req.params;
+     console.log("🔥 ACCEPT ROUTE HIT for", id);
 
     // Get repair so we have provider email
     const repairResult = await pool.query(
