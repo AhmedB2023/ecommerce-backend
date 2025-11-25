@@ -245,9 +245,12 @@ router.get("/:id/accept", async (req, res) => {
     const link = await stripe.accountLinks.create({
       account: accountId,
       type: "account_onboarding",
-      refresh_url: "https://tajernow.com/",
-      return_url: "https://tajernow.com/",
+     refresh_url: "https://ecommerce-backend-y3v4.onrender.com/stripe-refresh",
+return_url: "https://ecommerce-backend-y3v4.onrender.com/stripe-return",
+
     });
+    console.log("🔗 Stripe onboarding URL:", link.url);
+
 
     // Send onboarding email to provider
     await sendRepairEmail(
