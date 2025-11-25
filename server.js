@@ -3,6 +3,7 @@ const express = require('express');
 const app = express(); // ✅ MISSING BEFORE
 const cors = require('cors');
 const path = require('path');
+const axios = require("axios"); 
 
 const { sendProviderNotification } = require('./utils/sendRepairEmail');
 
@@ -341,6 +342,37 @@ const result = await db.query(
       return res.status(500).send("Webhook processing error");
     }
   }
+  // ⭐ Detect provider onboarding completion
+if (event.type === "account.updated") {
+  const account = event.data.object;
+
+  // Only act when transfers become ACTIVE
+  if (account.capabilities?.transfers === "active") {
+    console.log("🎉 Provider finished onboarding:", account.id);
+
+    // Find all completed repairs waiting for payout
+    const result = await pool.query(
+      `SELECT id 
+       FROM repair_requests
+       WHERE provider_stripe_account = $1
+         AND completion_status = 'user_confirmed'
+         AND payout_released_at IS NULL`,
+      [account.id]
+    );
+
+    for (const row of result.rows) {
+      console.log("💸 Auto-releasing payout for repair:", row.id);
+
+      // Trigger your existing payout logic
+     await axios.post(
+  `${process.env.APP_BASE_URL}/api/repairs/release-payment`,
+  { repairId: row.id }
+);
+
+    }
+  }
+}
+
 
   res.status(200).json({ received: true });
 });
