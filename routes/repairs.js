@@ -76,7 +76,6 @@ router.get("/open", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch open repair requests" });
   }
 });
-
 // ✅ Provider submits quote
 router.post("/:id/quote", async (req, res) => {
   try {
@@ -124,11 +123,8 @@ router.post("/:id/quote", async (req, res) => {
       await sendRepairEmail(
         requesterEmail,
         `
-        <p>You received a new quote from ${providerDisplay} for your repair request. 
-The quoted price is <strong>$${price_quote}</strong>.</p>
-
-
-        <p><em>You won’t be charged until you mark your repair as completed after the provider finishes the job.</em></p>
+        <p>You received a new quote from ${providerDisplay}.</p>
+        <p>The quoted price is <strong>$${price_quote}</strong>.</p>
 
         <p>Please choose an option below:</p>
 
@@ -150,15 +146,15 @@ The quoted price is <strong>$${price_quote}</strong>.</p>
       console.log(`✅ Quote email sent to ${requesterEmail}`);
     }
 
-    // ✅ Send provider a confirmation + job code email
+    // ✅ Send provider a confirmation + job code
     if (provider_email) {
       await sendRepairEmail(
         provider_email,
         `
           <h3>Your quote has been submitted successfully!</h3>
-          <p>Keep this Job Code safe — you’ll need it later to mark the job as completed.</p>
-          <p><strong>Job Code:</strong> ${repair.job_code}</p>
-          <p>We’ll notify you once the customer has made payment and you can proceed with the repair.</p>
+          <p>Here is your job code:</p>
+          <p><strong>${repair.job_code}</strong></p>
+          <p>You'll be notified once the customer makes payment.</p>
         `,
         []
       );
@@ -166,96 +162,10 @@ The quoted price is <strong>$${price_quote}</strong>.</p>
       console.log(`✅ Job code email sent to provider: ${provider_email}`);
     }
 
-    // ✅ Stripe Connect onboarding (only if provider not connected)
-    
-const stripeAccountCheck = await pool.query(
-  `SELECT provider_stripe_account FROM repair_requests WHERE id = $1`,
-  [id]
-);
-
-// ✅ Stripe Connect onboarding (stored per repair request)
-let stripeAccountId = repair.provider_stripe_account;
-
-if (!stripeAccountId) {
-  // STEP 1: Check if provider already has a Stripe account
-const existing = await pool.query(
-  "SELECT provider_stripe_account FROM repair_requests WHERE provider_email = $1 AND provider_stripe_account IS NOT NULL",
-  [provider_email]
-);
-
-if (existing.rows.length > 0) {
-  stripeAccountId = existing.rows[0].provider_stripe_account; // correct variable
-}
-
-
- const account = await stripe.accounts.create({
-  type: "express",
-  email: provider_email,
-  business_type: "individual",
-
-  // ⭐ THIS IS THE FIX → Required for delayed payouts
-  capabilities: {
-    card_payments: { requested: true },
-    transfers: { requested: true }
-  }
-});
-
-  console.log("✅ Stripe account created:", account.id);
-
-
-  stripeAccountId = account.id;
-
-  await pool.query(
-    `UPDATE repair_requests 
-     SET provider_stripe_account = $1 
-     WHERE id = $2`,
-    [stripeAccountId, id]
-  );
-
-      const accountLink = await stripe.accountLinks.create({
-        account: stripeAccountId,
-        refresh_url: "https://tajernow.com/",
-        return_url: "https://tajernow.com/",
-        type: "account_onboarding",
-      });
-
-   const connectSubject = "Action required: Complete your payout setup with Tajer";
-const connectHtml = `
-  <h3>Hi ${provider_first_name || "there"},</h3>
-
-  <p>You're almost ready to start receiving repair payments on Tajer.</p>
-
-  <p>
-    To activate your payout setup securely through Stripe, please click the button below.
-  </p>
-
-  <p style="text-align:center;margin:20px 0;">
-    <a href="${accountLink.url}"
-       style="background:#007bff;color:#fff;padding:12px 20px;
-       border-radius:6px;text-decoration:none;display:inline-block;">
-       Complete Payout Setup
-    </a>
-  </p>
-
-  <p>If the button above doesn’t work, copy and paste this link into your browser:</p>
-  <p><a href="${accountLink.url}">${accountLink.url}</a></p>
-
-  <p>
-    This secure link is powered by Stripe, Tajer’s trusted payment partner.
-    Once completed, your account will be ready to receive funds automatically
-    whenever a customer pays for a job.
-  </p>
-
-  <p>– The Tajer Support Team</p>
-`;
-
-
-      await sendRepairEmail(provider_email, connectHtml);
-
-      console.log(`✅ Stripe Connect email sent to provider: ${provider_email}`);
-    }
+    // ❗ NO STRIPE LOGIC HERE ANYMORE
 
     res.json({ success: true, repair });
+
   } catch (err) {
     console.error("❌ Error submitting quote:", err);
     res.status(500).json({ error: "Failed to submit quote" });
@@ -269,18 +179,92 @@ router.get("/:id/accept", async (req, res) => {
   try {
     const { id } = req.params;
 
-    const result = await pool.query(
-      `UPDATE repair_requests
-       SET status = 'accepted'
-       WHERE id = $1
-       RETURNING *`,
+    // Get repair so we have provider email
+    const repairResult = await pool.query(
+      `SELECT * FROM repair_requests WHERE id = $1`,
       [id]
     );
 
-    if (result.rows.length === 0)
+    if (repairResult.rows.length === 0)
       return res.status(404).send("Repair request not found.");
 
-    res.send(`<h2>✅ Quote Accepted</h2><p>Thank you! The provider will be notified.</p>`);
+    const repair = repairResult.rows[0];
+    const providerEmail = repair.provider_email;
+
+    // Mark request as accepted
+    await pool.query(
+      `UPDATE repair_requests
+       SET status = 'accepted'
+       WHERE id = $1`,
+      [id]
+    );
+
+    // ------------------------------------------
+    // ✅ STRIPE LOGIC
+    // ------------------------------------------
+
+    // 1. Try to find ANY existing stripe account for this provider (from any other job)
+    const existing = await pool.query(
+      `SELECT provider_stripe_account 
+       FROM repair_requests 
+       WHERE provider_email = $1 
+       AND provider_stripe_account IS NOT NULL 
+       LIMIT 1`,
+      [providerEmail]
+    );
+
+    let accountId;
+
+    if (existing.rows.length > 0) {
+      // Provider already has Stripe account — reuse it
+      accountId = existing.rows[0].provider_stripe_account;
+    } else {
+      // Create Stripe account ONCE
+      const account = await stripe.accounts.create({
+        type: "express",
+        email: providerEmail,
+        business_type: "individual",
+        capabilities: {
+          card_payments: { requested: true },
+          transfers: { requested: true }
+        }
+      });
+
+      accountId = account.id;
+
+      // Save Stripe account ID to THIS repair
+      await pool.query(
+        `UPDATE repair_requests
+         SET provider_stripe_account = $1
+         WHERE id = $2`,
+        [accountId, id]
+      );
+    }
+
+    // Always generate a NEW onboarding link for that SAME account
+    const link = await stripe.accountLinks.create({
+      account: accountId,
+      type: "account_onboarding",
+      refresh_url: "https://tajernow.com/",
+      return_url: "https://tajernow.com/",
+    });
+
+    // Send onboarding email to provider
+    await sendRepairEmail(
+      providerEmail,
+      `
+      <h3>Action Required</h3>
+      <p>Please complete your payout setup to receive repair payments.</p>
+      <p><a href="${link.url}">Click here to complete setup</a></p>
+      `,
+      []
+    );
+
+    // ------------------------------------------
+
+    res.send(`<h2>✅ Quote Accepted</h2>
+              <p>The provider has been notified and will receive a Stripe onboarding link.</p>`);
+
   } catch (err) {
     console.error("Error accepting quote:", err);
     res.status(500).send("Error accepting quote.");
