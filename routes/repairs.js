@@ -400,7 +400,8 @@ else if (email === repair.provider_email?.toLowerCase()) role = "provider";
 // ✅ Provider marks repair as completed (awaiting user confirmation)
 router.post("/mark-completed", async (req, res) => {
   try {
-    const { jobCode, email } = req.body;
+    const { jobCode, email, final_price } = req.body;
+
 
     // Find the job
     const result = await pool.query(
