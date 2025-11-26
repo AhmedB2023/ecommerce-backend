@@ -476,7 +476,8 @@ router.post("/confirm-completion", async (req, res) => {
     }
 
     // 2️⃣ Calculate remaining charge
-    const remaining = Number(repair.price_quote) - 20;
+    const remaining = Number(repair.final_price) - 20;
+
     const chargeAmount = Math.round(remaining * 100);
 
     // 3️⃣ Base PaymentIntent structure
@@ -503,12 +504,15 @@ router.post("/confirm-completion", async (req, res) => {
     }
 
     // 5️⃣ Only apply fee + transfer when fully allowed
-    if (transfersActive) {
-      paymentIntentData.application_fee_amount = Math.round(repair.price_quote * 0.10 * 100);
-      paymentIntentData.transfer_data = {
-        destination: repair.provider_stripe_account
-      };
-    }
+if (transfersActive) {
+  paymentIntentData.application_fee_amount =
+    Math.round(Number(repair.final_price) * 0.10 * 100);
+
+  paymentIntentData.transfer_data = {
+    destination: repair.provider_stripe_account
+  };
+}
+
 
     // 6️⃣ Create PaymentIntent
     const paymentIntent = await stripe.paymentIntents.create(paymentIntentData);
