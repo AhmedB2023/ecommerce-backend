@@ -418,12 +418,13 @@ router.post("/mark-completed", async (req, res) => {
       return res.status(403).json({ error: "Unauthorized action" });
 
     // Update to provider_completed
-    await pool.query(
-      `UPDATE repair_requests 
-       SET completion_status = 'provider_completed'
-       WHERE job_code = $1`,
-      [jobCode]
-    );
+  await pool.query(
+  `UPDATE repair_requests 
+     SET completion_status = 'provider_completed',
+         final_price = $1
+     WHERE job_code = $2`,
+  [req.body.final_price, jobCode]
+);
 
     // 📨 Notify requester to confirm completion
     if (repair.requester_email) {
