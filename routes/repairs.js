@@ -476,10 +476,12 @@ router.post("/confirm-completion", async (req, res) => {
     }
 
     // 2️⃣ Calculate remaining charge
+    console.log("🔥 final_price =", repair.final_price);
+
     const remaining = Number(repair.final_price) - 20;
 
     const chargeAmount = Math.round(remaining * 100);
-    
+
     if (remaining <= 0) {
   return res.status(400).json({
     success: false,
