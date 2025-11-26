@@ -1660,6 +1660,20 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'Tajer backend is alive!' });
 });
 
+// ... all your routes above ...
+
+app.get("/stripe-refresh", (req, res) => {
+  res.send("Stripe refresh page - link expired, please request a new one.");
+});
+
+app.get("/stripe-return", (req, res) => {
+  res.send("Stripe onboarding complete!");
+});
+
+// START SERVER
+app.listen(PORT, () => console.log(`Server running`));
+
+
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => {
