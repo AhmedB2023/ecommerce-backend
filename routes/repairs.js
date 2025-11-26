@@ -479,6 +479,13 @@ router.post("/confirm-completion", async (req, res) => {
     const remaining = Number(repair.final_price) - 20;
 
     const chargeAmount = Math.round(remaining * 100);
+    
+    if (remaining <= 0) {
+  return res.status(400).json({
+    success: false,
+    error: "Final price must be greater than the $20 deposit"
+  });
+}
 
     // 3️⃣ Base PaymentIntent structure
     let paymentIntentData = {
