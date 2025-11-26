@@ -1670,8 +1670,7 @@ app.get("/stripe-return", (req, res) => {
   res.send("Stripe onboarding complete!");
 });
 
-// START SERVER
-app.listen(PORT, () => console.log(`Server running`));
+
 
 
 
