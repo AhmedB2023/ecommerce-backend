@@ -514,15 +514,15 @@ router.post("/confirm-completion", async (req, res) => {
       transfersActive = acct.capabilities?.transfers === "active";
     }
 
-    // 5️⃣ Only apply fee + transfer when fully allowed
-if (transfersActive) {
+    // 5️⃣ Only apply fee + transfer
+
   paymentIntentData.application_fee_amount =
     Math.round(Number(repair.final_price) * 0.10 * 100);
 
   paymentIntentData.transfer_data = {
     destination: repair.provider_stripe_account
   };
-}
+
 
 
     // 6️⃣ Create PaymentIntent
