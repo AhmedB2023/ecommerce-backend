@@ -514,14 +514,16 @@ router.post("/confirm-completion", async (req, res) => {
       transfersActive = acct.capabilities?.transfers === "active";
     }
 
-    // 5️⃣ Only apply fee + transfer
+ // 10% platform fee ALWAYS
+paymentIntentData.application_fee_amount =
+  Math.round(Number(repair.final_price) * 0.10 * 100);
 
-  paymentIntentData.application_fee_amount =
-    Math.round(Number(repair.final_price) * 0.10 * 100);
-
+// Only set transfer destination if it's a NON-EMPTY valid Stripe account ID
+if (repair.provider_stripe_account && repair.provider_stripe_account.trim() !== "") {
   paymentIntentData.transfer_data = {
     destination: repair.provider_stripe_account
   };
+}
 
 
 
