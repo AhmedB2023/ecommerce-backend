@@ -242,12 +242,8 @@ router.get("/:id/accept", async (req, res) => {
       );
     }
     // ⛔ STOP: If provider already onboarded, no new link
-const account = await stripe.accounts.retrieve(accountId);
 if (account.capabilities?.transfers === "active") {
-  return res.send(`
-    <h2>Provider already connected to Stripe</h2>
-    <p>No onboarding needed.</p>
-  `);
+  console.log("Provider already connected — no onboarding link needed.");
 }
 
 
