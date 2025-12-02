@@ -241,6 +241,15 @@ router.get("/:id/accept", async (req, res) => {
         [accountId, id]
       );
     }
+    // ⛔ STOP: If provider already onboarded, no new link
+const account = await stripe.accounts.retrieve(accountId);
+if (account.capabilities?.transfers === "active") {
+  return res.send(`
+    <h2>Provider already connected to Stripe</h2>
+    <p>No onboarding needed.</p>
+  `);
+}
+
 
     // Always generate a NEW onboarding link for that SAME account
 const link = await stripe.accountLinks.create({
@@ -469,6 +478,13 @@ router.post("/confirm-completion", async (req, res) => {
       return res.status(404).json({ success: false, error: "Not found" });
 
     const repair = rows[0];
+    // 🚫 BLOCK if already completed
+if (repair.completion_status === "user_confirmed") {
+  return res.status(400).json({
+    success: false,
+    error: "This repair is already completed. No further charges allowed."
+  });
+}
     const hasStripe = !!repair.provider_stripe_account;
 
     if (!repair.payment_method_id) {
