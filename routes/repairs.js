@@ -515,9 +515,12 @@ router.post("/confirm-completion", async (req, res) => {
       transfersActive = acct.capabilities?.transfers === "active";
     }
 
- // 10% platform fee ALWAYS
-paymentIntentData.application_fee_amount =
-  Math.round(Number(repair.final_price) * 0.10 * 100);
+ // once the provider is onboarded 10% platform fee is applied
+if (transfersActive) {
+  paymentIntentData.application_fee_amount =
+    Math.round(Number(repair.final_price) * 0.10 * 100);
+}
+
 
 // Only send payout now if provider finished onboarding (transfers = active).
 // If not active, full payment stays in platform balance for later automatic release.
