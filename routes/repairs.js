@@ -254,15 +254,16 @@ const link = await stripe.accountLinks.create({
 
 
     // Send onboarding email to provider
-    await sendRepairEmail(
-      providerEmail,
-      `
-      <h3>Action Required</h3>
-      <p>Please complete your payout setup to receive repair payments.</p>
-      <p><a href="${link.url}">Click here to complete setup</a></p>
-      `,
-      []
-    );
+  await sendRepairEmail(
+  providerEmail,
+  `
+  <h3>Action Required</h3>
+  <p>Please complete your payout setup to receive repair payments.</p>
+  <p><a href="${link.url}">Click here to complete setup</a></p>
+  `,
+  [],
+  "Complete Your Stripe Onboarding"
+);
 
     // ------------------------------------------
 

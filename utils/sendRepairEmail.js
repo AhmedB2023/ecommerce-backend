@@ -18,9 +18,10 @@ const sendRepairEmail = async (toEmail, htmlContent, image_urls = []) => {
 
   // ✅ Detect subject automatically based on email type
   let subject;
-  if (htmlContent.includes("Complete your payout setup")) {
-    subject = "Action required: Complete your payout setup with Tajer";
-  } else if (htmlContent.includes("quote has been submitted")) {
+ if (htmlContent.toLowerCase().includes("complete your payout setup")) {
+  subject = "Action required: Complete your payout setup with Tajer";
+}
+ else if (htmlContent.includes("quote has been submitted")) {
     subject = "Your Quote Has Been Submitted Successfully";
   } else if (htmlContent.includes("paid repair")) {
     subject = "New Paid Repair Request";
