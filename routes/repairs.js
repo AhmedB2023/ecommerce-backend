@@ -243,13 +243,13 @@ router.get("/:id/accept", async (req, res) => {
     }
 
     // Always generate a NEW onboarding link for that SAME account
-    const link = await stripe.accountLinks.create({
-      account: accountId,
-      type: "account_onboarding",
-     refresh_url: "https://ecommerce-backend-y3v4.onrender.com/stripe-refresh",
-return_url: "https://ecommerce-backend-y3v4.onrender.com/stripe-return",
+const link = await stripe.accountLinks.create({
+  account: accountId,
+  type: "account_onboarding",
+  refresh_url: "https://ecommerce-backend-y3v4.onrender.com/stripe-refresh",
+  return_url: "https://ecommerce-backend-y3v4.onrender.com/stripe-success",
+});
 
-    });
     console.log("🔗 Stripe onboarding URL:", link.url);
 
 
