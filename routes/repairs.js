@@ -519,8 +519,9 @@ router.post("/confirm-completion", async (req, res) => {
 paymentIntentData.application_fee_amount =
   Math.round(Number(repair.final_price) * 0.10 * 100);
 
-// Only set transfer destination if it's a NON-EMPTY valid Stripe account ID
-if (repair.provider_stripe_account && repair.provider_stripe_account.trim() !== "") {
+// Only send payout now if provider finished onboarding (transfers = active).
+// If not active, full payment stays in platform balance for later automatic release.
+if (transfersActive) {
   paymentIntentData.transfer_data = {
     destination: repair.provider_stripe_account
   };
