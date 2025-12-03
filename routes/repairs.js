@@ -242,9 +242,8 @@ router.get("/:id/accept", async (req, res) => {
       );
     }
     // ⛔ STOP: If provider already onboarded, no new link
-if (account.capabilities?.transfers === "active") {
   console.log("Provider already connected — no onboarding link needed.");
-}
+
 
 
     // Always generate a NEW onboarding link for that SAME account
