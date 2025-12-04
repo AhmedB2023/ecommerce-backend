@@ -219,6 +219,13 @@ router.get("/:id/accept", async (req, res) => {
     if (existing.rows.length > 0) {
       // Provider already has Stripe account — reuse it
       accountId = existing.rows[0].provider_stripe_account;
+      // ⭐ FIX: Save existing account into this repair too
+  await pool.query(
+    `UPDATE repair_requests
+     SET provider_stripe_account = $1
+     WHERE id = $2`,
+    [accountId, id]
+  );
     } else {
       // Create Stripe account ONCE
       const account = await stripe.accounts.create({
