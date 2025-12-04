@@ -520,10 +520,8 @@ if (repair.completion_status === "user_confirmed") {
       confirm: true
     };
 
-    // 🛑 Remove empty customer_id (prevents Stripe error)
-    if (!repair.customer_id) {
-      delete paymentIntentData.customer;
-    }
+// FIX: Always attach the saved customer to match the payment_method
+paymentIntentData.customer = repair.customer_id;
 
     // 4️⃣ Check Stripe capabilities (only if provider has account)
     let transfersActive = false;
