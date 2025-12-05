@@ -31,6 +31,7 @@ const bodyParser = require("body-parser");
 
 app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
   console.log("🔥 Stripe webhook called");
+  res.status(200).send("ok");
 
   const sig = req.headers["stripe-signature"];
   const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
