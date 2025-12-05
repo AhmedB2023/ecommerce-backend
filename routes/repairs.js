@@ -328,6 +328,7 @@ router.post("/payments/start/:id", async (req, res) => {
 
     // 2️⃣ Create Stripe customer (⭐ REQUIRED)
     const customer = await stripe.customers.create({});
+    console.log("DEBUG created customer:", customer.id);
 
     // 3️⃣ Create $20 deposit PaymentIntent (CHARGE NOW)
     const paymentIntent = await stripe.paymentIntents.create({
