@@ -531,6 +531,8 @@ paymentIntentData.customer = repair.customer_id;
       const acct = await stripe.accounts.retrieve(repair.provider_stripe_account);
       transfersActive = acct.capabilities?.transfers === "active";
     }
+    console.log("Provider status:", acct.capabilities?.transfers);
+
 
  // once the provider is onboarded 10% platform fee is applied
 if (transfersActive) {
