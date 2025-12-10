@@ -527,9 +527,15 @@ if (repair.completion_status === "user_confirmed") {
       off_session: true,
       confirm: true
     };
+// FIX: Only attach customer if it's a real value
+if (!repair.customer_id || repair.customer_id.trim() === "") {
+  delete paymentIntentData.customer;
+  console.log("⚠️ No valid customer_id found — removing customer field.");
+} else {
+  paymentIntentData.customer = repair.customer_id;
+  console.log("✅ Using customer:", repair.customer_id);
+}
 
-// FIX: Always attach the saved customer to match the payment_method
-paymentIntentData.customer = repair.customer_id;
 
     // 4️⃣ Check Stripe capabilities (only if provider has account)
     let transfersActive = false;
