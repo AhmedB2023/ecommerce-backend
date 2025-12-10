@@ -219,6 +219,13 @@ router.get("/:id/accept", async (req, res) => {
     if (existing.rows.length > 0) {
       // Provider already has Stripe account — reuse it
       accountId = existing.rows[0].provider_stripe_account;
+        // ⭐ FIX #1: retrieve real account status
+  const account = await stripe.accounts.retrieve(accountId);
+
+        // ⭐ FIX #2: if already onboarded, stop here
+  if (account.capabilities?.transfers === "active") {
+    return res.send("Provider already onboarded. No onboarding required.");
+  }
       // ⭐ FIX: Save existing account into this repair too
   await pool.query(
     `UPDATE repair_requests
