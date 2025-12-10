@@ -375,7 +375,11 @@ if (event.type === "account.updated") {
 }
 
 
-  res.status(200).json({ received: true });
+
+
+  
+  // ✅ ONLY RESPOND **AFTER** all logic is done:
+  return res.status(200).send("ok");
 });
 
 
