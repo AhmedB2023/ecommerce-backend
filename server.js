@@ -51,6 +51,7 @@ if (event.type === "payment_intent.succeeded") {
 
   // Only handle deposits
   if (intent.metadata?.type === "deposit") {
+
     const repairId = intent.metadata.repairId;
 
     console.log(`💰 Deposit received for repair ${repairId}`);
@@ -79,6 +80,32 @@ if (event.type === "payment_intent.succeeded") {
        WHERE id = $1`,
       [repairId]
     );
+
+    // ⭐ Send provider onboarding-start link
+const providerInfo = await pool.query(
+  `SELECT provider_email FROM repair_requests WHERE id = $1`,
+  [repairId]
+);
+
+const providerEmail = providerInfo.rows[0]?.provider_email;
+
+if (providerEmail) {
+  await tranEmailApi.sendTransacEmail({
+    sender: { name: "Tajer", email: "support@tajernow.com" },
+    to: [{ email: providerEmail }],
+    subject: "Action Needed: Complete Your Payout Setup",
+    htmlContent: `
+      <p>You received a new repair job.</p>
+      <p>Please complete your payout setup to receive payment:</p>
+      <p><a href="https://your-backend.com/provider/start-onboarding?email=${providerEmail}">
+      Click here to complete your onboarding</a></p>
+    `
+  });
+
+  console.log("📧 Provider onboarding-start link sent:", providerEmail);
+}
+
+    
 
     // Fetch user email
     const result = await pool.query(

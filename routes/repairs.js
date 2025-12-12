@@ -178,9 +178,9 @@ router.post("/:id/quote", async (req, res) => {
 router.get("/:id/accept", async (req, res) => {
   try {
     const { id } = req.params;
-     console.log("🔥 ACCEPT ROUTE HIT for", id);
+    console.log("🔥 ACCEPT ROUTE HIT for", id);
 
-    // Get repair so we have provider email
+    // Get repair
     const repairResult = await pool.query(
       `SELECT * FROM repair_requests WHERE id = $1`,
       [id]
@@ -189,10 +189,7 @@ router.get("/:id/accept", async (req, res) => {
     if (repairResult.rows.length === 0)
       return res.status(404).send("Repair request not found.");
 
-    const repair = repairResult.rows[0];
-    const providerEmail = repair.provider_email;
-
-    // Mark request as accepted
+    // Mark as accepted ONLY
     await pool.query(
       `UPDATE repair_requests
        SET status = 'accepted'
@@ -200,99 +197,23 @@ router.get("/:id/accept", async (req, res) => {
       [id]
     );
 
-    // ------------------------------------------
-    // ✅ STRIPE LOGIC
-    // ------------------------------------------
+    // ❌ NO STRIPE LOGIC HERE
+    // ❌ NO STRIPE ACCOUNT CREATED
+    // ❌ NO ONBOARDING LINK
+    // ❌ NO EMAIL TO PROVIDER HERE
 
-    // 1. Try to find ANY existing stripe account for this provider (from any other job)
-    const existing = await pool.query(
-      `SELECT provider_stripe_account 
-       FROM repair_requests 
-       WHERE provider_email = $1 
-       AND provider_stripe_account IS NOT NULL 
-       LIMIT 1`,
-      [providerEmail]
-    );
-
-    let accountId;
-
-    if (existing.rows.length > 0) {
-      // Provider already has Stripe account — reuse it
-      accountId = existing.rows[0].provider_stripe_account;
-        // ⭐ FIX #1: retrieve real account status
-  const account = await stripe.accounts.retrieve(accountId);
-
-        // ⭐ FIX #2: if already onboarded, stop here
-  if (account.capabilities?.transfers === "active") {
-    return res.send("Provider already onboarded. No onboarding required.");
-  }
-      // ⭐ FIX: Save existing account into this repair too
-  await pool.query(
-    `UPDATE repair_requests
-     SET provider_stripe_account = $1
-     WHERE id = $2`,
-    [accountId, id]
-  );
-    } else {
-      // Create Stripe account ONCE
-      const account = await stripe.accounts.create({
-        type: "express",
-        email: providerEmail,
-        business_type: "individual",
-        capabilities: {
-          card_payments: { requested: true },
-          transfers: { requested: true }
-        }
-      });
-
-      accountId = account.id;
-
-      // Save Stripe account ID to THIS repair
-      await pool.query(
-        `UPDATE repair_requests
-         SET provider_stripe_account = $1
-         WHERE id = $2`,
-        [accountId, id]
-      );
-    }
-    // ⛔ STOP: If provider already onboarded, no new link
-  console.log("Provider already connected — no onboarding link needed.");
-
-
-
-    // Always generate a NEW onboarding link for that SAME account
-const link = await stripe.accountLinks.create({
-  account: accountId,
-  type: "account_onboarding",
-  refresh_url: "https://ecommerce-backend-y3v4.onrender.com/stripe-refresh",
-  return_url: "https://ecommerce-backend-y3v4.onrender.com/stripe-success",
-});
-
-    console.log("🔗 Stripe onboarding URL:", link.url);
-
-
-    // Send onboarding email to provider
-  await sendRepairEmail(
-  providerEmail,
-  `
-  <h3>Action Required</h3>
-  <p>Please complete your payout setup to receive repair payments.</p>
-  <p><a href="${link.url}">Click here to complete setup</a></p>
-  `,
-  [],
-  "Complete Your Stripe Onboarding"
-);
-
-    // ------------------------------------------
-
-    res.send(`<h2>✅ Quote Accepted</h2>
-              <p>The provider has been notified and will receive a Stripe onboarding link.</p>`);
+    // User will now go pay the deposit
+    res.send(`
+      <h2>✅ Quote Accepted</h2>
+      <p>Please proceed to the payment page to pay the $20 deposit.</p>
+    `);
 
   } catch (err) {
     console.error("Error accepting quote:", err);
     res.status(500).send("Error accepting quote.");
   }
 });
+
 
 // ✅ Requester rejects quote
 router.get("/:id/reject", async (req, res) => {
@@ -528,12 +449,14 @@ if (repair.completion_status === "user_confirmed") {
       confirm: true
     };
 // FIX: Only attach customer if it's a real value
-if (!repair.customer_id || repair.customer_id.trim() === "") {
-  delete paymentIntentData.customer;
-  console.log("⚠️ No valid customer_id found — removing customer field.");
-} else {
+if (repair.customer_id && repair.customer_id.trim() !== "") {
+  // Valid customer → use it
   paymentIntentData.customer = repair.customer_id;
   console.log("✅ Using customer:", repair.customer_id);
+} else {
+  // No valid customer → remove field so Stripe doesn't crash
+  delete paymentIntentData.customer;
+  console.log("⚠️ No valid customer_id found — customer removed from PaymentIntent");
 }
 
 
@@ -762,6 +685,64 @@ router.post("/save-payment-method", async (req, res) => {
   );
 
   res.json({ success: true });
+});
+
+router.get("/provider/start-onboarding", async (req, res) => {
+  const providerEmail = req.query.email;
+
+  if (!providerEmail) return res.status(400).send("Missing provider email");
+
+  try {
+    // 1️⃣ Check if provider already has an account
+    const existing = await pool.query(
+      `SELECT provider_stripe_account 
+       FROM repair_requests
+       WHERE provider_email = $1
+       AND provider_stripe_account IS NOT NULL
+       LIMIT 1`,
+      [providerEmail]
+    );
+
+    let accountId;
+
+    if (existing.rows.length > 0) {
+      accountId = existing.rows[0].provider_stripe_account;
+    } else {
+      // 2️⃣ Create Stripe account NOW (only when provider clicks)
+      const account = await stripe.accounts.create({
+        type: "express",
+        email: providerEmail,
+        business_type: "individual",
+        capabilities: {
+          card_payments: { requested: true },
+          transfers: { requested: true }
+        }
+      });
+
+      accountId = account.id;
+
+      await pool.query(
+        `UPDATE repair_requests
+         SET provider_stripe_account = $1
+         WHERE provider_email = $2`,
+        [accountId, providerEmail]
+      );
+    }
+
+    // 3️⃣ Create fresh onboarding link
+    const link = await stripe.accountLinks.create({
+      account: accountId,
+      type: "account_onboarding",
+      refresh_url: `https://your-backend.com/provider/start-onboarding?email=${providerEmail}`,
+      return_url: "https://your-backend.com/onboarding/success"
+    });
+
+    return res.redirect(link.url);
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send("Error starting onboarding");
+  }
 });
 
 
