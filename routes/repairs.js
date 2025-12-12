@@ -516,60 +516,73 @@ if (transfersActive) {
 
 
 
-// Admin triggers payout after provider creates account
+// Admin triggers payout after provider completes onboarding
 router.post("/release-payment", async (req, res) => {
+
   const { repairId } = req.body;
 
   try {
+    console.log("🔥 RELEASE PAYMENT HIT for repair:", repairId);
+
     // 1️⃣ Fetch repair
     const { rows } = await pool.query(
       `SELECT * FROM repair_requests WHERE id = $1`,
       [repairId]
     );
+
     const repair = rows[0];
-
-    if (!repair)
+    if (!repair) {
+      console.log("❌ Repair not found");
       return res.json({ success: false, message: "Repair not found" });
+    }
 
-    // 2️⃣ Provider MUST have a Stripe account
+    // 2️⃣ Must have Stripe account
     if (!repair.provider_stripe_account) {
+      console.log("❌ Provider missing Stripe account");
       return res.json({
         success: false,
         message: "Provider still does not have a Stripe account."
       });
     }
 
-    // 3️⃣ Check Stripe Connect account capability
+    // 3️⃣ Check onboarding status
     const account = await stripe.accounts.retrieve(
       repair.provider_stripe_account
     );
 
-    // ⭐ EXPRESS accounts only require transfers to be active
     if (account.capabilities?.transfers !== "active") {
+      console.log("❌ Provider not onboarded:", account.capabilities);
       return res.json({
         success: false,
         message: "Provider has not finished onboarding yet."
       });
     }
 
-    // 4️⃣ Block payout until user confirms completion
+    // 4️⃣ User must confirm completion
     if (repair.completion_status !== "user_confirmed") {
+      console.log("❌ User not confirmed yet");
       return res.json({
         success: false,
         message: "User has not confirmed completion yet."
       });
     }
 
-    // 5️⃣ Prevent duplicate payout
+    // 5️⃣ Prevent double payout
     if (repair.payout_released_at) {
-      return res.json({ success: false, message: "Already paid once." });
+      console.log("⚠️ Already paid previously");
+      return res.json({
+        success: false,
+        message: "Already paid once."
+      });
     }
 
-    // 6️⃣ Calculate payout
-    const final = Number(repair.final_price || repair.price_quote);
-    const providerAmount = Math.round(final * 0.90 * 100);
+    // 6️⃣ Compute payout
+    const finalPrice = Number(repair.final_price || repair.price_quote);
+    const providerAmount = Math.round(finalPrice * 0.90 * 100);
 
-    // 7️⃣ Release payout to provider
+    console.log(`💵 Sending payout: $${providerAmount / 100}`);
+
+    // 7️⃣ Send transfer
     const transfer = await stripe.transfers.create({
       amount: providerAmount,
       currency: "usd",
@@ -577,11 +590,13 @@ router.post("/release-payment", async (req, res) => {
       metadata: {
         repair_id: repair.id,
         job_code: repair.job_code,
-        type: "repair_payout"
-      }
+        type: "repair_payout",
+      },
     });
 
-    // 8️⃣ Mark payout released
+    console.log("✅ Transfer success:", transfer.id);
+
+    // 8️⃣ Update DB
     await pool.query(
       `UPDATE repair_requests
        SET payout_released_at = NOW()
@@ -589,17 +604,20 @@ router.post("/release-payment", async (req, res) => {
       [repair.id]
     );
 
-    res.json({
+    console.log("🏁 RELEASE PAYMENT FINISHED");
+
+    return res.json({
       success: true,
       message: "Payout released to provider.",
-      transferId: transfer.id
+      transferId: transfer.id,
     });
 
   } catch (err) {
     console.error("❌ Error in release-payment:", err);
-    res.json({ success: false, message: "Server error" });
+    return res.json({ success: false, message: "Server error" });
   }
 });
+
 
 
 
