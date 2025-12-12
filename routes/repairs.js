@@ -733,8 +733,8 @@ router.get("/provider/start-onboarding", async (req, res) => {
     const link = await stripe.accountLinks.create({
       account: accountId,
       type: "account_onboarding",
-      refresh_url: `https://your-backend.com/provider/start-onboarding?email=${providerEmail}`,
-      return_url: "https://your-backend.com/onboarding/success"
+      refresh_url: `https://ecommerce-backend-y3v4.onrender.com/provider/start-onboarding?email=${providerEmail}`,
+      return_url: "https://ecommerce-backend-y3v4.onrender.com/onboarding/success"
     });
 
     return res.redirect(link.url);

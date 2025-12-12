@@ -97,7 +97,7 @@ if (providerEmail) {
     htmlContent: `
       <p>You received a new repair job.</p>
       <p>Please complete your payout setup to receive payment:</p>
-      <p><a href="https://your-backend.com/provider/start-onboarding?email=${providerEmail}">
+      <p><a href="https://ecommerce-backend-y3v4.onrender.com/provider/start-onboarding?email=${providerEmail}">
       Click here to complete your onboarding</a></p>
     `
   });
