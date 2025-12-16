@@ -244,9 +244,73 @@ router.get("/:id/reject", async (req, res) => {
 router.post("/payments/start/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    console.log("🚀 /payments/start (deposit) called with ID:", id);
 
-    // 1️⃣ Update status to show deposit is needed
+    // 1️⃣ Load repair + provider
+    const { rows } = await pool.query(
+      `SELECT provider_email, provider_stripe_account
+       FROM repair_requests
+       WHERE id = $1`,
+      [id]
+    );
+
+    if (rows.length === 0)
+      return res.status(404).json({ error: "Repair not found" });
+
+    const repair = rows[0];
+    let providerStripeAccount = repair.provider_stripe_account;
+
+    // 2️⃣ Reuse existing Stripe account if provider already has one
+    if (!providerStripeAccount) {
+      const existing = await pool.query(
+        `SELECT provider_stripe_account
+         FROM repair_requests
+         WHERE provider_email = $1
+           AND provider_stripe_account IS NOT NULL
+         LIMIT 1`,
+        [repair.provider_email]
+      );
+
+      if (existing.rows.length > 0) {
+        providerStripeAccount = existing.rows[0].provider_stripe_account;
+
+        await pool.query(
+          `UPDATE repair_requests
+           SET provider_stripe_account = $1
+           WHERE id = $2`,
+          [providerStripeAccount, id]
+        );
+      }
+    }
+
+    // 3️⃣ Create Stripe account ONLY if none exists
+    if (!providerStripeAccount) {
+      const account = await stripe.accounts.create({
+        type: "express",
+        email: repair.provider_email,
+        capabilities: {
+          card_payments: { requested: true },
+          transfers: { requested: true }
+        }
+      });
+
+      providerStripeAccount = account.id;
+
+      await pool.query(
+        `UPDATE repair_requests
+         SET provider_stripe_account = $1
+         WHERE id = $2`,
+        [providerStripeAccount, id]
+      );
+
+      // send onboarding link
+      await sendRepairEmail(
+        repair.provider_email,
+        `Complete Stripe onboarding:
+         ${process.env.APP_BASE_URL}/api/repairs/provider/start-onboarding?email=${repair.provider_email}`
+      );
+    }
+
+    // 4️⃣ Update repair status
     await pool.query(
       `UPDATE repair_requests
        SET status = 'accepted_pending_deposit'
@@ -254,54 +318,44 @@ router.post("/payments/start/:id", async (req, res) => {
       [id]
     );
 
-    // 2️⃣ Create Stripe customer (⭐ REQUIRED)
+    // 5️⃣ Create Stripe customer
     const customer = await stripe.customers.create({});
-    console.log("DEBUG created customer:", customer.id);
 
-    // 3️⃣ Create $20 deposit PaymentIntent (CHARGE NOW)
+    // 6️⃣ Create $20 deposit PaymentIntent
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: 2000,               // $20
+      amount: 2000,
       currency: "usd",
-      customer: customer.id,      // ⭐ attach customer
+      customer: customer.id,
       payment_method_types: ["card"],
-
-      // ⭐ REQUIRED FOR SAVING PAYMENT METHOD IN 2025 API VERSION
       setup_future_usage: "off_session",
       payment_method_options: {
-        card: {
-          setup_future_usage: "off_session"
-        }
+        card: { setup_future_usage: "off_session" }
       },
-
-      metadata: {
-        repairId: id.toString(),
-        type: "deposit"
-      }
+      metadata: { repairId: id, type: "deposit" }
     });
 
-    console.log("💳 Deposit PaymentIntent created:", paymentIntent.id);
+    // 7️⃣ Save payment info
+    await pool.query(
+      `UPDATE repair_requests
+       SET customer_id = $1,
+           payment_intent_id = $2
+       WHERE id = $3`,
+      [customer.id, paymentIntent.id, id]
+    );
 
-    // 4️⃣ Save customer (payment method saved later)
-await pool.query(
-  `UPDATE repair_requests
-   SET customer_id = $1,
-       payment_intent_id = $2
-   WHERE id = $3`,
-  [customer.id, paymentIntent.id, id]
-);
-
-    // 5️⃣ Send clientSecret back to frontend
+    // 8️⃣ Return client secret
     res.json({
       clientSecret: paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id,
-      customerId: customer.id    // ⭐ ADD THIS
+      customerId: customer.id
     });
 
   } catch (err) {
-    console.error("❌ Deposit creation error:", err.message);
-    res.status(500).json({ error: "Failed to start deposit payment." });
+    console.error(err);
+    res.status(500).json({ error: "Failed to start deposit payment" });
   }
 });
+
 
 
 // ✅ Check repair job by job code + email
