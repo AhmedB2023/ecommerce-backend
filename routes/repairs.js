@@ -282,12 +282,13 @@ router.post("/payments/start/:id", async (req, res) => {
     console.log("💳 Deposit PaymentIntent created:", paymentIntent.id);
 
     // 4️⃣ Save customer (payment method saved later)
-    await pool.query(
-      `UPDATE repair_requests
-       SET customer_id = $1
-       WHERE id = $2`,
-      [customer.id, id]
-    );
+await pool.query(
+  `UPDATE repair_requests
+   SET customer_id = $1,
+       payment_intent_id = $2
+   WHERE id = $3`,
+  [customer.id, paymentIntent.id, id]
+);
 
     // 5️⃣ Send clientSecret back to frontend
     res.json({
