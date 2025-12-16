@@ -700,13 +700,13 @@ router.get("/provider/start-onboarding", async (req, res) => {
   try {
     // 1️⃣ Check if provider already has an account
     const existing = await pool.query(
-      `SELECT provider_stripe_account 
-       FROM repair_requests
-       WHERE provider_email = $1
-       AND provider_stripe_account IS NOT NULL
-       LIMIT 1`,
-      [providerEmail]
-    );
+  `UPDATE repair_requests
+   SET provider_stripe_account = $1
+   WHERE provider_email = $2
+     AND provider_stripe_account IS NULL`,
+  [accountId, providerEmail]
+);
+
 
     let accountId;
 
