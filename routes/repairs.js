@@ -545,6 +545,15 @@ if (transfersActive) {
 
     // 6️⃣ Create PaymentIntent
     const paymentIntent = await stripe.paymentIntents.create(paymentIntentData);
+    if (transfersActive) {
+  await pool.query(
+    `UPDATE repair_requests
+     SET payout_released_at = NOW()
+     WHERE job_code = $1`,
+    [jobCode]
+  );
+}
+
 
     // 7️⃣ Update db
     await pool.query(
