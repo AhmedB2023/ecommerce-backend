@@ -757,30 +757,26 @@ router.post("/update-final-price", async (req, res) => {
 
 router.get("/provider/start-onboarding", async (req, res) => {
   const providerEmail = req.query.email;
-
   if (!providerEmail) return res.status(400).send("Missing provider email");
 
+  let accountId; // ✅ DECLARE FIRST
+
   try {
-    // 1️⃣ Check if provider already has an account
     const existing = await pool.query(
-  `UPDATE repair_requests
-   SET provider_stripe_account = $1
-   WHERE provider_email = $2
-     AND provider_stripe_account IS NULL`,
-  [accountId, providerEmail]
-);
-
-
-    let accountId;
+      `SELECT provider_stripe_account
+       FROM repair_requests
+       WHERE provider_email = $1
+         AND provider_stripe_account IS NOT NULL
+       LIMIT 1`,
+      [providerEmail]
+    );
 
     if (existing.rows.length > 0) {
       accountId = existing.rows[0].provider_stripe_account;
     } else {
-      // 2️⃣ Create Stripe account NOW (only when provider clicks)
       const account = await stripe.accounts.create({
         type: "express",
         email: providerEmail,
-        business_type: "individual",
         capabilities: {
           card_payments: { requested: true },
           transfers: { requested: true }
@@ -797,22 +793,20 @@ router.get("/provider/start-onboarding", async (req, res) => {
       );
     }
 
-    // 3️⃣ Create fresh onboarding link
     const link = await stripe.accountLinks.create({
       account: accountId,
       type: "account_onboarding",
-      refresh_url: `https://ecommerce-backend-y3v4.onrender.com/api/repairs/provider/start-onboarding?email=${providerEmail}`,
-      return_url: "https://ecommerce-backend-y3v4.onrender.com/onboarding/success"
+      refresh_url: `${process.env.APP_BASE_URL}/api/repairs/provider/start-onboarding?email=${providerEmail}`,
+      return_url: `${process.env.APP_BASE_URL}/onboarding/success`
     });
 
     return res.redirect(link.url);
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).send("Error starting onboarding");
+    console.error("ONBOARDING ERROR:", err.message);
+    return res.status(500).send(err.message);
   }
 });
-
 
 
    
