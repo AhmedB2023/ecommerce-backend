@@ -797,7 +797,8 @@ router.get("/provider/start-onboarding", async (req, res) => {
       account: accountId,
       type: "account_onboarding",
       refresh_url: `${process.env.APP_BASE_URL}/api/repairs/provider/start-onboarding?email=${providerEmail}`,
-      return_url: `${process.env.APP_BASE_URL}/onboarding/success`
+      return_url: `${process.env.APP_BASE_URL}/api/repairs/onboarding-complete?account=${accountId}`
+
     });
 
     return res.redirect(link.url);
@@ -806,6 +807,28 @@ router.get("/provider/start-onboarding", async (req, res) => {
     console.error("ONBOARDING ERROR:", err.message);
     return res.status(500).send(err.message);
   }
+});
+
+router.get("/onboarding-complete", async (req, res) => {
+  const { account } = req.query;
+
+  // find waiting repairs
+  const result = await pool.query(
+    `SELECT id FROM repair_requests
+     WHERE provider_stripe_account = $1
+     AND completion_status = 'user_confirmed'
+     AND payout_released_at IS NULL`,
+    [account]
+  );
+
+  for (const row of result.rows) {
+    await axios.post(
+      `${process.env.APP_BASE_URL}/api/repairs/release-payment`,
+      { repairId: row.id }
+    );
+  }
+
+  res.redirect("https://tajernow.com/onboarding-success");
 });
 
 
