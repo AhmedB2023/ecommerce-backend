@@ -392,11 +392,46 @@ if (event.type === "account.updated") {
     for (const row of result.rows) {
       console.log("💸 Auto-releasing payout for repair:", row.id);
 
-      // Trigger your existing payout logic
-     await axios.post(
-  `${process.env.APP_BASE_URL}/api/repairs/release-payment`,
-  { repairId: row.id }
+  const repairRes = await pool.query(
+  `SELECT *
+   FROM repair_requests
+   WHERE id = $1`,
+  [row.id]
 );
+
+const repair = repairRes.rows[0];
+ if (!repair.payment_intent_id) {
+    console.log(
+      "⚠️ Skipping payout — missing payment_intent_id for repair",
+      repair.id
+    );
+    continue;
+  }
+
+const providerAmount = Math.round(
+  Number(repair.final_price) * 0.9 * 100
+);
+
+await stripe.transfers.create({
+  amount: providerAmount,
+  currency: "usd",
+  destination: account.id,
+  source_transaction: repair.payment_intent_id,
+  metadata: {
+    repair_id: repair.id,
+    job_code: repair.job_code,
+    type: "auto_payout_after_onboarding",
+  },
+});
+
+await pool.query(
+  `UPDATE repair_requests
+   SET payout_released_at = NOW()
+   WHERE id = $1`,
+  [repair.id]
+);
+
+console.log("✅ Auto payout released for repair", repair.id);
 
     }
   }
