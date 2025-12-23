@@ -448,133 +448,108 @@ router.post("/mark-completed", async (req, res) => {
   }
 });
 
-// ✅ User confirms job completion
 router.post("/confirm-completion", async (req, res) => {
   const { jobCode, email } = req.body;
 
   try {
     // 1️⃣ Verify job
     const { rows } = await pool.query(
-      `SELECT * FROM repair_requests 
+      `SELECT * FROM repair_requests
        WHERE job_code = $1 AND requester_email = $2`,
       [jobCode, email]
     );
 
     if (rows.length === 0)
-      return res.status(404).json({ success: false, error: "Not found" });
+      return res.status(404).json({ error: "Not found" });
 
     const repair = rows[0];
-    // 🚫 BLOCK if already completed
-if (repair.completion_status === "user_confirmed") {
-  return res.status(400).json({
-    success: false,
-    error: "This repair is already completed. No further charges allowed."
-  });
-}
-    const hasStripe = !!repair.provider_stripe_account;
+
+    if (repair.completion_status === "user_confirmed") {
+      return res.status(400).json({ error: "Already completed" });
+    }
 
     if (!repair.payment_method_id) {
-      return res.status(400).json({
-        success: false,
-        error: "Missing saved payment method — user never completed deposit"
-      });
+      return res.status(400).json({ error: "Missing saved card" });
     }
 
     // 2️⃣ Calculate remaining charge
-    console.log("🔥 final_price =", repair.final_price);
-
     const remaining = Number(repair.final_price) - 20;
+    if (remaining <= 0) {
+      return res.status(400).json({ error: "Invalid final price" });
+    }
 
     const chargeAmount = Math.round(remaining * 100);
 
-    if (remaining <= 0) {
-  return res.status(400).json({
-    success: false,
-    error: "Final price must be greater than the $20 deposit"
-  });
-}
-
-    // 3️⃣ Base PaymentIntent structure
-    let paymentIntentData = {
+    // 3️⃣ Charge customer (ALWAYS)
+    const paymentIntent = await stripe.paymentIntents.create({
       amount: chargeAmount,
       currency: "usd",
-      customer: repair.customer_id,        // may be deleted below
       payment_method: repair.payment_method_id,
+      customer: repair.customer_id || undefined,
       off_session: true,
-      confirm: true
-    };
-// FIX: Only attach customer if it's a real value
-if (repair.customer_id && repair.customer_id.trim() !== "") {
-  // Valid customer → use it
-  paymentIntentData.customer = repair.customer_id;
-  console.log("✅ Using customer:", repair.customer_id);
-} else {
-  // No valid customer → remove field so Stripe doesn't crash
-  delete paymentIntentData.customer;
-  console.log("⚠️ No valid customer_id found — customer removed from PaymentIntent");
-}
+      confirm: true,
+    });
 
-
-    // 4️⃣ Check Stripe capabilities (only if provider has account)
-    let transfersActive = false;
-
-    if (hasStripe) {
-      const acct = await stripe.accounts.retrieve(repair.provider_stripe_account);
-      console.log("Provider status:", acct.capabilities?.transfers);
-      transfersActive = acct.capabilities?.transfers === "active";
-    }
-    
-
-
- // once the provider is onboarded 10% platform fee is applied
-if (transfersActive) {
-  paymentIntentData.application_fee_amount =
-    Math.round(Number(repair.final_price) * 0.10 * 100);
-}
-
-
-// Only send payout now if provider finished onboarding (transfers = active).
-// If not active, full payment stays in platform balance for later automatic release.
-if (transfersActive) {
-  paymentIntentData.transfer_data = {
-    destination: repair.provider_stripe_account
-  };
-}
-
-
-
-    // 6️⃣ Create PaymentIntent
-    const paymentIntent = await stripe.paymentIntents.create(paymentIntentData);
-    if (transfersActive) {
-  await pool.query(
-    `UPDATE repair_requests
-     SET payout_released_at = NOW()
-     WHERE job_code = $1`,
-    [jobCode]
-  );
-}
-
-
-    // 7️⃣ Update db
+    // 4️⃣ Mark job completed + save PaymentIntent
     await pool.query(
       `UPDATE repair_requests
        SET completion_status = 'user_confirmed',
            payment_status = 'final_paid',
-           status = 'completed'
+           status = 'completed',
+           payment_intent_id = $2
        WHERE job_code = $1`,
-      [jobCode]
+      [jobCode, paymentIntent.id]
     );
 
+    // 5️⃣ Check if provider is onboarded
+    let transfersActive = false;
+    if (repair.provider_stripe_account) {
+      const acct = await stripe.accounts.retrieve(
+        repair.provider_stripe_account
+      );
+      transfersActive = acct.capabilities?.transfers === "active";
+    }
+
+    // 6️⃣ INSTANT payout if onboarded
+    if (transfersActive) {
+      const providerAmount = Math.round(
+        Number(repair.final_price) * 0.9 * 100
+      );
+
+      await stripe.transfers.create({
+        amount: providerAmount,
+        currency: "usd",
+        destination: repair.provider_stripe_account,
+        source_transaction: paymentIntent.id,
+        metadata: {
+          repair_id: repair.id,
+          job_code: repair.job_code,
+          type: "instant_payout",
+        },
+      });
+
+      await pool.query(
+        `UPDATE repair_requests
+         SET payout_released_at = NOW()
+         WHERE job_code = $1`,
+        [jobCode]
+      );
+    }
+
+    // 7️⃣ Done
     res.json({
       success: true,
-      message: "Final payment charged. Payout will be released after provider onboarding."
+      message: transfersActive
+        ? "Payment charged and provider paid instantly."
+        : "Payment charged. Provider will be paid after onboarding.",
     });
 
   } catch (err) {
-    console.error("❌ Error in confirm-completion:", err);
-    res.status(500).json({ success: false, error: "Server error" });
+    console.error("❌ confirm-completion error:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
+
 
 
 
