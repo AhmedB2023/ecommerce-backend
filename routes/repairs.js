@@ -449,6 +449,9 @@ router.post("/mark-completed", async (req, res) => {
 });
 
 router.post("/confirm-completion", async (req, res) => {
+
+  console.log("🔍 payment_method_id from DB:", repair.payment_method_id);
+
   const { jobCode, email } = req.body;
 
   try {
