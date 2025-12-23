@@ -450,7 +450,7 @@ router.post("/mark-completed", async (req, res) => {
 
 router.post("/confirm-completion", async (req, res) => {
 
-  console.log("🔍 payment_method_id from DB:", repair.payment_method_id);
+  
 
   const { jobCode, email } = req.body;
 
@@ -466,6 +466,7 @@ router.post("/confirm-completion", async (req, res) => {
       return res.status(404).json({ error: "Not found" });
 
     const repair = rows[0];
+    console.log("🔍 payment_method_id from DB:", repair.payment_method_id);
 
     if (repair.completion_status === "user_confirmed") {
       return res.status(400).json({ error: "Already completed" });
