@@ -26,10 +26,15 @@ cloudinary.config({
 const bodyParser = require("body-parser");
 
 
+const Stripe = require('stripe');
+const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
+const pool = require('./db');
 
 app.post(
   "/webhook/account",
-  bodyParser.raw({ type: "*/*" }),
+  bodyParser.raw({ type: "application/json" })
+,
   async (req, res) => {
     console.log("🔥 ACCOUNT WEBHOOK HIT");
 
@@ -75,7 +80,8 @@ app.post(
 
 app.post(
   "/webhook/connected",
-  bodyParser.raw({ type: "*/*" }),
+ bodyParser.raw({ type: "application/json" })
+,
   async (req, res) => {
     console.log("🟣 CONNECTED WEBHOOK HIT");
 
@@ -147,14 +153,13 @@ app.post(
 
 
 
-const Stripe = require('stripe');
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+
 
 const bcrypt = require('bcryptjs');
 
 const { v4: uuidv4 } = require('uuid');
 const crypto = require('crypto');
-const pool = require('./db');
+
 
 
 
