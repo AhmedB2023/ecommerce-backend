@@ -35,6 +35,8 @@ app.post(
   "/webhook/account",
 bodyParser.raw({ type: "*/*" }),
   async (req, res) => {
+    console.log("ACCOUNT whsec:", process.env.STRIPE_WEBHOOK_SECRET_ACCOUNT?.slice(-6));
+
     console.log("🔥 ACCOUNT WEBHOOK HIT");
 
     const sig = req.headers["stripe-signature"];
