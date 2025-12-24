@@ -33,8 +33,7 @@ const pool = require('./db');
 
 app.post(
   "/webhook/account",
-  bodyParser.raw({ type: "application/json" })
-,
+bodyParser.raw({ type: "*/*" }),
   async (req, res) => {
     console.log("🔥 ACCOUNT WEBHOOK HIT");
 
@@ -80,8 +79,7 @@ app.post(
 
 app.post(
   "/webhook/connected",
- bodyParser.raw({ type: "application/json" })
-,
+bodyParser.raw({ type: "*/*" }),
   async (req, res) => {
     console.log("🟣 CONNECTED WEBHOOK HIT");
 
