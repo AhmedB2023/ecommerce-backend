@@ -27,430 +27,121 @@ const bodyParser = require("body-parser");
 
 
 
+app.post(
+  "/webhook/account",
+  bodyParser.raw({ type: "*/*" }),
+  async (req, res) => {
+    console.log("🔥 ACCOUNT WEBHOOK HIT");
 
-
-app.post("/webhook", bodyParser.raw({ type: "*/*" }), async (req, res) => {
-
-  console.log("🔥 Stripe webhook called");
-  
-
-  const sig = req.headers["stripe-signature"];
-  const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
-  let event;
-
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-  } catch (err) {
-    console.error("❌ Webhook signature verification failed:", err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-
-  // 🔵 Deposit payment succeeded ($20)
-if (event.type === "payment_intent.succeeded") {
-  const intent = event.data.object;
-
-  // Only handle deposits
-  if (intent.metadata?.type === "deposit") {
-
-    const repairId = intent.metadata.repairId;
-
-    console.log(`💰 Deposit received for repair ${repairId}`);
-     console.log(
-      "PM:",
-      intent.payment_method,
-      "RID:",
-      intent.metadata.repairId
-    );
-
-    // ⭐ Save customer's default payment method for later final charge
-    const paymentMethodId = intent.payment_method;
-    const customerId = intent.customer;
-
-    await pool.query(
-      `UPDATE repair_requests
-       SET payment_method_id = $1,
-           customer_id = $2
-       WHERE id = $3`,
-      [paymentMethodId, customerId, repairId]
-    );
-
-    console.log("💾 Saved card for future payment:", paymentMethodId);
-
-
-
-    // Update DB status
-    await pool.query(
-      `UPDATE repair_requests
-       SET status = 'deposit_paid',
-           payment_status = 'deposit_received'
-       WHERE id = $1`,
-      [repairId]
-    );
-
-    // ⭐ Send provider onboarding-start link
-const providerInfo = await pool.query(
-  `SELECT provider_email FROM repair_requests WHERE id = $1`,
-  [repairId]
-);
-
-const providerEmail = providerInfo.rows[0]?.provider_email;
-
-if (providerEmail) {
-  await tranEmailApi.sendTransacEmail({
-    sender: { name: "Tajer", email: "support@tajernow.com" },
-    to: [{ email: providerEmail }],
-    subject: "Action Needed: Complete Your Payout Setup",
-    htmlContent: `
-      <p>You received a new repair job.</p>
-      <p>Please complete your payout setup to receive payment:</p>
-      <p><a href="https://ecommerce-backend-y3v4.onrender.com/api/repairs/provider/start-onboarding?email=${providerEmail}
-">
-      Click here to complete your onboarding</a></p>
-    `
-  });
-
-  console.log("📧 Provider onboarding-start link sent:", providerEmail);
-}
-
-    
-
-    // Fetch user email
-    const result = await pool.query(
-      `SELECT requester_email FROM repair_requests WHERE id = $1`,
-      [repairId]
-    );
-
-    const userEmail = result.rows[0]?.requester_email;
-   
-
-
-
-
-    // Send email to user
-    if (userEmail) {
-      
-      await tranEmailApi.sendTransacEmail({
-        sender: { name: "Tajer", email: "support@tajernow.com" },
-        to: [{ email: userEmail }],
-        subject: "Your $20 Deposit Has Been Received",
-        htmlContent: `
-          <p>Hello,</p>
-          <p>Your <strong>$20 deposit</strong> has been successfully processed.</p>
-
-          <p><strong>Refund Policy:</strong></p>
-          <ul>
-            <li>$10 is a non-refundable booking fee.</li>
-            <li>$10 is refundable ONLY if the provider does not show up.</li>
-          </ul>
-
-          <p>Why do we keep a $10 booking fee?</p>
-          <p>
-            This fee protects you by guaranteeing a provider is reserved specifically
-            for your appointment time and helps prevent last-minute cancellations.
-          </p>
-
-          <p>Thank you for choosing Tajer.</p>
-        `
-      });
-
-      console.log(`📧 Deposit email sent to user: ${userEmail}`);
-    }
-
-        // ⭐ Notify provider that the user has paid for the repair
-const providerRes = await pool.query(
-  `SELECT provider_email, description, customer_address, preferred_time
-   FROM repair_requests WHERE id = $1`,
-  [repairId]
-);
-
-const provider = providerRes.rows[0];
-
-if (provider?.provider_email) {
-  await tranEmailApi.sendTransacEmail({
-    sender: { name: "Tajer", email: "support@tajernow.com" },
-    to: [{ email: provider.provider_email }],
-    subject: "Customer Payment Received – Repair Job Confirmed",
-    htmlContent: `
-      <p>Hello,</p>
-      <p>The user has <strong>paid for the repair</strong>. The job is now confirmed and assigned to you.</p>
-
-      <p><strong>Repair Details:</strong></p>
-      <ul>
-        <li><b>Description:</b> ${provider.description}</li>
-        <li><b>Address:</b> ${provider.customer_address}</li>
-        <li><b>Preferred Time:</b> ${provider.preferred_time}</li>
-      </ul>
-
-      <p>Please proceed to the customer's location at the scheduled time.</p>
-
-      <p>— The Tajer Team</p>
-    `
-  });
-
-  console.log(`📧 Provider notified that user paid for repair ${repairId}`);
-}
-
-
-
-
-    return res.status(200).send("Deposit handled");
-  }
-}
-
-
-
- if (event.type === "checkout.session.completed") {
-
-
- const session = event.data.object;
-    const repairId = session.metadata?.repairId;
-if (repairId && session.metadata?.repairType === "repair_request") {
-  // ✅ Mark the repair as paid
-  await pool.query(
-    `UPDATE repair_requests
-     SET status = 'paid',
-         payment_status = 'paid'
-     WHERE id = $1`,
-    [repairId]
-  );
-  console.log(`✅ Repair request ${repairId} marked as paid (status + payment_status updated).`);
-// ⭐ Save the PaymentIntent ID so we can release money later
-const paymentIntentId = session.payment_intent;
-
-await pool.query(
-  `UPDATE repair_requests
-   SET payment_intent_id = $1
-   WHERE id = $2`,
-  [paymentIntentId, repairId]
-);
-
-console.log(`🧾 PaymentIntent ID saved for repair ${repairId}: ${paymentIntentId}`);
-
-  // 🟢 Notify the provider about the paid repair
-  const customerAddress = session.metadata.customerAddress;
-  const preferredTime = session.metadata.preferredTime;
-
-  const result = await pool.query(
-    `SELECT description, requester_email, provider_email 
-     FROM repair_requests WHERE id = $1`,
-    [repairId]
-  );
-
- const repair = result.rows[0];
-if (repair?.provider_email) {
-  // 🕒 Convert preferred time to readable format
-let formattedTime = preferredTime;
-
-if (preferredTime) {
-  let parsedTime = preferredTime;
-
-  // If it looks like a number (timestamp in seconds), multiply by 1000
-  if (!isNaN(preferredTime)) {
-    parsedTime = Number(preferredTime) * 1000;
-  }
-
-  try {
-    const date = new Date(parsedTime);
-    formattedTime = date.toLocaleString(); // ✅ readable: "Nov 12, 2025, 3:30 PM"
-  } catch {
-    formattedTime = preferredTime; // fallback
-  }
-}
-
-
-  await sendProviderNotification(repair.provider_email, {
-    description: repair.description,
-    customer_address: customerAddress,
-    preferred_time: formattedTime, // ✅ use formattedTime here
-    requester_email: repair.requester_email,
-  });
-
-  console.log(`📧 Provider notified for repair ${repairId}`);
-}
-
-}
-
-  
+    const sig = req.headers["stripe-signature"];
+    let event;
 
     try {
-    // Extract values from metadata and session
-const propertyPrice = session.metadata?.propertyPrice ? Number(session.metadata.propertyPrice) : null;
-const serviceFee = session.metadata?.serviceFee ? Number(session.metadata.serviceFee) : null;
-const totalPaid = session.amount_total ? session.amount_total / 100 : null; // Stripe gives cents
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET_ACCOUNT
+      );
+    } catch (err) {
+      console.error("❌ Account webhook signature failed:", err.message);
+      return res.status(400).send("Webhook Error");
+    }
 
-const result = await db.query(
-  `UPDATE reservations
-   SET status = 'paid',
-       property_price = $2,
-       service_fee = $3,
-       total_paid = $4
-   WHERE id = $1
-   RETURNING *`,
-  [reservationId, propertyPrice, serviceFee, totalPaid]
+    // 🔵 DEPOSIT SUCCESS
+    if (event.type === "payment_intent.succeeded") {
+      const intent = event.data.object;
+
+      if (intent.metadata?.type === "deposit") {
+        const repairId = intent.metadata.repairId;
+
+        console.log("💰 Deposit for repair:", repairId);
+        console.log("PM:", intent.payment_method);
+
+        await pool.query(
+          `UPDATE repair_requests
+           SET payment_method_id = $1,
+               customer_id = $2,
+               status = 'deposit_paid',
+               payment_status = 'deposit_received'
+           WHERE id = $3`,
+          [intent.payment_method, intent.customer, repairId]
+        );
+      }
+    }
+
+    return res.sendStatus(200);
+  }
 );
- reservation = result.rows[0];
-      if (!reservation) return res.status(404).send("Reservation not found");
 
-      // ⭐ 2️⃣ Mark property as unavailable (no more reservations allowed)
-      await db.query(
-        "UPDATE properties SET is_active = false WHERE id = $1",
-        [reservation.property_id]
+app.post(
+  "/webhook/connected",
+  bodyParser.raw({ type: "*/*" }),
+  async (req, res) => {
+    console.log("🟣 CONNECTED WEBHOOK HIT");
+
+    const sig = req.headers["stripe-signature"];
+    let event;
+
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET_CONNECTED
       );
+    } catch (err) {
+      console.error("❌ Connected webhook signature failed:", err.message);
+      return res.status(400).send("Webhook Error");
+    }
 
-      // ⭐ 3️⃣ Reject ALL OTHER reservations (except the paid one), no matter the status
-      await db.query(
-        "UPDATE reservations SET status = 'rejected' WHERE property_id = $1 AND id <> $2 AND status NOT IN ('rejected', 'paid')",
-        [reservation.property_id, reservation.id]
-      );
+    // 🟣 PROVIDER FINISHED ONBOARDING
+    if (event.type === "account.updated") {
+      const account = event.data.object;
 
-      console.log(`🔁 Rejected all other reservations for property ${reservation.property_id}`);
+      if (account.capabilities?.transfers === "active") {
+        console.log("🎉 Provider onboarded:", account.id);
 
-      // 4️⃣ Fetch landlord and tenant emails
-      const landlordRes = await db.query("SELECT email FROM users WHERE id = $1", [reservation.landlord_id]);
-      const landlordEmail = landlordRes.rows[0]?.email;
-      const tenantEmail = reservation.guest_contact;
-
-      const sender = { name: "Tajer", email: "support@tajernow.com" };
-      const emailPromises = [];
-
-      // 5️⃣ Send confirmation email to tenant
-      if (tenantEmail?.includes("@")) {
-        emailPromises.push(
-          tranEmailApi.sendTransacEmail({
-            sender,
-            to: [{ email: tenantEmail }],
-            subject: "🎉 Your Reservation is Confirmed!",
-            htmlContent: `
-              <p>Thank you for your payment. Your reservation for property #${reservation.property_id} has been <b>confirmed</b>.</p>
-              <p>You can now contact the landlord for further details.</p>
-              <p>– The Tajer Team</p>
-            `
-          })
+        const repairs = await pool.query(
+          `SELECT * FROM repair_requests
+           WHERE provider_stripe_account = $1
+             AND completion_status = 'user_confirmed'
+             AND payout_released_at IS NULL`,
+          [account.id]
         );
-      }
 
-      // 6️⃣ Send notification email to landlord
-      if (landlordEmail) {
-        emailPromises.push(
-          tranEmailApi.sendTransacEmail({
-            sender,
-            to: [{ email: landlordEmail }],
-            subject: "✅ Reservation Confirmed for Your Property",
-            htmlContent: `
-              <p>Your property #${reservation.property_id} now has a confirmed reservation.</p>
-              <p>All other pending offers have been automatically rejected.</p>
-              <p>– The Tajer Team</p>
-            `
-          })
-        );
-      }
+        for (const repair of repairs.rows) {
+          if (!repair.payment_intent_id) continue;
 
-      // 7️⃣ Send rejection emails to all other tenants
-      const rejectedRes = await db.query(
-        "SELECT guest_contact FROM reservations WHERE property_id = $1 AND id != $2 AND status = 'rejected'",
-        [reservation.property_id, reservation.id]
-      );
-
-      for (const r of rejectedRes.rows) {
-        if (r.guest_contact?.includes("@")) {
-          emailPromises.push(
-            tranEmailApi.sendTransacEmail({
-              sender,
-              to: [{ email: r.guest_contact }],
-              subject: "Reservation Update",
-              htmlContent: `
-                <p>We appreciate your interest in this property.</p>
-                <p>Unfortunately, another reservation was accepted for the same property.</p>
-                <p>Please feel free to explore other listings on <a href="https://tajernow.com">Tajer</a>.</p>
-              `
-            })
+          const providerAmount = Math.round(
+            Number(repair.final_price) * 0.9 * 100
           );
+
+          await stripe.transfers.create({
+            amount: providerAmount,
+            currency: "usd",
+            destination: account.id,
+            source_transaction: repair.payment_intent_id,
+            metadata: {
+              repair_id: repair.id,
+              job_code: repair.job_code,
+            },
+          });
+
+          await pool.query(
+            `UPDATE repair_requests
+             SET payout_released_at = NOW()
+             WHERE id = $1`,
+            [repair.id]
+          );
+
+          console.log("💸 Auto payout released:", repair.id);
         }
       }
-
-      // 8️⃣ Send all emails concurrently
-      await Promise.all(emailPromises);
-      console.log("✅ Emails sent to accepted tenant, landlord, and rejected tenants.");
-
-    } catch (err) {
-      console.error("❌ Error processing webhook:", err.message);
-      return res.status(500).send("Webhook processing error");
     }
+
+    return res.sendStatus(200);
   }
-  // ⭐ Detect provider onboarding completion
-if (event.type === "account.updated") {
-  const account = event.data.object;
-
-  // Only act when transfers become ACTIVE
-  if (account.capabilities?.transfers === "active") {
-    console.log("🎉 Provider finished onboarding:", account.id);
-
-    // Find all completed repairs waiting for payout
-    const result = await pool.query(
-      `SELECT id 
-       FROM repair_requests
-       WHERE provider_stripe_account = $1
-         AND completion_status = 'user_confirmed'
-         AND payout_released_at IS NULL`,
-      [account.id]
-    );
-
-    for (const row of result.rows) {
-      console.log("💸 Auto-releasing payout for repair:", row.id);
-
-  const repairRes = await pool.query(
-  `SELECT *
-   FROM repair_requests
-   WHERE id = $1`,
-  [row.id]
 );
 
-const repair = repairRes.rows[0];
- if (!repair.payment_intent_id) {
-    console.log(
-      "⚠️ Skipping payout — missing payment_intent_id for repair",
-      repair.id
-    );
-    continue;
-  }
-
-const providerAmount = Math.round(
-  Number(repair.final_price) * 0.9 * 100
-);
-
-await stripe.transfers.create({
-  amount: providerAmount,
-  currency: "usd",
-  destination: account.id,
-  source_transaction: repair.payment_intent_id,
-  metadata: {
-    repair_id: repair.id,
-    job_code: repair.job_code,
-    type: "auto_payout_after_onboarding",
-  },
-});
-
-await pool.query(
-  `UPDATE repair_requests
-   SET payout_released_at = NOW()
-   WHERE id = $1`,
-  [repair.id]
-);
-
-console.log("✅ Auto payout released for repair", repair.id);
-
-    }
-  }
-}
-
-
-
-
-  
-  // ✅ ONLY RESPOND **AFTER** all logic is done:
-  return res.status(200).send("ok");
-});
 
 
 
