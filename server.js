@@ -1,11 +1,6 @@
 require('dotenv').config();
 const express = require('express');
-const app = express(); // ✅ MISSING BEFORE
-const cors = require('cors');
-const path = require('path');
-const axios = require("axios"); 
 
-const { sendProviderNotification } = require('./utils/sendRepairEmail');
 
 
 
@@ -112,7 +107,12 @@ bodyParser.raw({ type: "*/*" }),
   }
 );
 
+const app = express(); // ✅ MISSING BEFORE
+const cors = require('cors');
+const path = require('path');
+const axios = require("axios"); 
 
+const { sendProviderNotification } = require('./utils/sendRepairEmail');
 
 
 
