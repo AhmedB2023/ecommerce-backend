@@ -32,51 +32,16 @@ const pool = require('./db');
 
 app.post(
   "/webhook/account",
-bodyParser.raw({ type: "*/*" }),
-  async (req, res) => {
-    console.log("ACCOUNT whsec:", process.env.STRIPE_WEBHOOK_SECRET_ACCOUNT?.slice(-6));
-
-    console.log("🔥 ACCOUNT WEBHOOK HIT");
-
-    const sig = req.headers["stripe-signature"];
-    let event;
-
-    try {
-      event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET_ACCOUNT
-      );
-    } catch (err) {
-      console.error("❌ Account webhook signature failed:", err.message);
-      return res.status(400).send("Webhook Error");
-    }
-
-    // 🔵 DEPOSIT SUCCESS
-    if (event.type === "payment_intent.succeeded") {
-      const intent = event.data.object;
-
-      if (intent.metadata?.type === "deposit") {
-        const repairId = intent.metadata.repairId;
-
-        console.log("💰 Deposit for repair:", repairId);
-        console.log("PM:", intent.payment_method);
-
-        await pool.query(
-          `UPDATE repair_requests
-           SET payment_method_id = $1,
-               customer_id = $2,
-               status = 'deposit_paid',
-               payment_status = 'deposit_received'
-           WHERE id = $3`,
-          [intent.payment_method, intent.customer, repairId]
-        );
-      }
-    }
-
+  bodyParser.raw({ type: "*/*" }),
+  (req, res) => {
+    console.log("🔥 WEBHOOK HIT");
+    console.log("Headers:", req.headers);
+    console.log("Body type:", Buffer.isBuffer(req.body));
+    console.log("Body length:", req.body.length);
     return res.sendStatus(200);
   }
 );
+
 
 app.post(
   "/webhook/connected",
