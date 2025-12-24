@@ -1,188 +1,37 @@
 require('dotenv').config();
 const express = require('express');
+const app = express();               // ✅ FIRST
 
-
-
-
-
-
-
-// 🩵 Cloudinary setup
-const cloudinary = require('cloudinary').v2;
-
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET
-});
-
-// Stripe raw body middleware
-const bodyParser = require("body-parser");
-
-
+const bodyParser = require('body-parser');
 const Stripe = require('stripe');
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-const pool = require('./db');
-
+// 🔴 WEBHOOKS
 app.post(
   "/webhook/account",
-  bodyParser.raw({ type: "*/*" }),
+  bodyParser.raw({ type: "application/json" }),
   (req, res) => {
-    console.log("🔥 WEBHOOK HIT");
-    console.log("Headers:", req.headers);
-    console.log("Body type:", Buffer.isBuffer(req.body));
-    console.log("Body length:", req.body.length);
-    return res.sendStatus(200);
+    console.log(Buffer.isBuffer(req.body)); // MUST be true
+    res.sendStatus(200);
   }
 );
-
 
 app.post(
   "/webhook/connected",
-bodyParser.raw({ type: "*/*" }),
-  async (req, res) => {
-    console.log("🟣 CONNECTED WEBHOOK HIT");
-
-    const sig = req.headers["stripe-signature"];
-    let event;
-
-    try {
-      event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET_CONNECTED
-      );
-    } catch (err) {
-      console.error("❌ Connected webhook signature failed:", err.message);
-      return res.status(400).send("Webhook Error");
-    }
-
-    // 🟣 PROVIDER FINISHED ONBOARDING
-    if (event.type === "account.updated") {
-      const account = event.data.object;
-
-      if (account.capabilities?.transfers === "active") {
-        console.log("🎉 Provider onboarded:", account.id);
-
-        const repairs = await pool.query(
-          `SELECT * FROM repair_requests
-           WHERE provider_stripe_account = $1
-             AND completion_status = 'user_confirmed'
-             AND payout_released_at IS NULL`,
-          [account.id]
-        );
-
-        for (const repair of repairs.rows) {
-          if (!repair.payment_intent_id) continue;
-
-          const providerAmount = Math.round(
-            Number(repair.final_price) * 0.9 * 100
-          );
-
-          await stripe.transfers.create({
-            amount: providerAmount,
-            currency: "usd",
-            destination: account.id,
-            source_transaction: repair.payment_intent_id,
-            metadata: {
-              repair_id: repair.id,
-              job_code: repair.job_code,
-            },
-          });
-
-          await pool.query(
-            `UPDATE repair_requests
-             SET payout_released_at = NOW()
-             WHERE id = $1`,
-            [repair.id]
-          );
-
-          console.log("💸 Auto payout released:", repair.id);
-        }
-      }
-    }
-
-    return res.sendStatus(200);
+  bodyParser.raw({ type: "application/json" }),
+  (req, res) => {
+    stripe.webhooks.constructEvent(
+      req.body,
+      req.headers["stripe-signature"],
+      process.env.STRIPE_WEBHOOK_SECRET_CONNECTED
+    );
+    res.sendStatus(200);
   }
 );
 
-const app = express(); // ✅ MISSING BEFORE
-const cors = require('cors');
-const path = require('path');
-const axios = require("axios"); 
-
-const { sendProviderNotification } = require('./utils/sendRepairEmail');
-
-
-
-
-
-
-const bcrypt = require('bcryptjs');
-
-const { v4: uuidv4 } = require('uuid');
-const crypto = require('crypto');
-
-
-
-
-
-const sendResetEmail = require('./utils/sendEmail');
-
-const allowedOrigins = [
-  'https://tajernow.com',
-  'http://localhost:3000',
-  'https://ecommerce-backend-y3v4.onrender.com'
-];
-
-
-app.use(cors({
-  origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("CORS not allowed"));
-    }
-  },
-  methods: "GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS",
-  allowedHeaders: "Content-Type,Authorization",
-  credentials: true,
-}));
-
-
-// 🧳 File upload setup
-const multer = require('multer');
-
+// 🔴 ONLY AFTER
 app.use(express.json());
-
-
-// ✅ Serve uploaded images statically
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-
-// ✅ Repair routes
-const repairRoutes = require("./routes/repairs");
-app.use("/api/repairs", repairRoutes);
-
-
-
-
-
-
-// 📧 Brevo setup
-const SibApiV3Sdk = require('sib-api-v3-sdk');
-const defaultClient = SibApiV3Sdk.ApiClient.instance;
-const apiKey = defaultClient.authentications['api-key'];
-apiKey.apiKey = process.env.BREVO_API_KEY;
-const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
-const sendEmail = require('./utils/sendEmail');
-
-
-
-
-const db = require('./db');
-
+app.use(cors());
 
 
 
