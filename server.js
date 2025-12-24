@@ -55,6 +55,12 @@ if (event.type === "payment_intent.succeeded") {
     const repairId = intent.metadata.repairId;
 
     console.log(`💰 Deposit received for repair ${repairId}`);
+     console.log(
+      "PM:",
+      intent.payment_method,
+      "RID:",
+      intent.metadata.repairId
+    );
 
     // ⭐ Save customer's default payment method for later final charge
     const paymentMethodId = intent.payment_method;
