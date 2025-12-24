@@ -29,7 +29,8 @@ const bodyParser = require("body-parser");
 
 
 
-app.post("/webhook", bodyParser.raw({ type: "application/json" }), async (req, res) => {
+app.post("/webhook", bodyParser.raw({ type: "*/*" }), async (req, res) => {
+
   console.log("🔥 Stripe webhook called");
   
 
