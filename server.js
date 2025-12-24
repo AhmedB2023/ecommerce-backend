@@ -9,8 +9,7 @@ const { sendProviderNotification } = require('./utils/sendRepairEmail');
 
 
 
-// 🧳 File upload setup
-const multer = require('multer');
+
 
 
 // 🩵 Cloudinary setup
@@ -187,7 +186,8 @@ app.use(cors({
 }));
 
 
-
+// 🧳 File upload setup
+const multer = require('multer');
 
 app.use(express.json());
 
