@@ -1,17 +1,59 @@
-require('dotenv').config();
-const express = require('express');
-const app = express();               // ✅ FIRST
+require("dotenv").config();
 
-const bodyParser = require('body-parser');
-const Stripe = require('stripe');
+/* =======================
+   CORE SETUP
+======================= */
+const express = require("express");
+const app = express();
+const path = require("path");
+const cors = require("cors");
+const bodyParser = require("body-parser");
+
+/* =======================
+   DATABASE
+======================= */
+const pool = require("./db");
+const db = require("./db");
+
+/* =======================
+   STRIPE
+======================= */
+const Stripe = require("stripe");
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
-// 🔴 WEBHOOKS
+/* =======================
+   CLOUDINARY
+======================= */
+const cloudinary = require("cloudinary").v2;
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+  api_key: process.env.CLOUDINARY_API_KEY,
+  api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
+/* =======================
+   BREVO (Sendinblue)
+======================= */
+const SibApiV3Sdk = require("sib-api-v3-sdk");
+const defaultClient = SibApiV3Sdk.ApiClient.instance;
+defaultClient.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
+const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+
+/* =======================
+   OTHER LIBS
+======================= */
+const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
+const { v4: uuidv4 } = require("uuid");
+
+/* =======================
+   STRIPE WEBHOOKS (MUST BE FIRST)
+======================= */
 app.post(
   "/webhook/account",
   bodyParser.raw({ type: "application/json" }),
   (req, res) => {
-    console.log(Buffer.isBuffer(req.body)); // MUST be true
+    console.log("🔥 ACCOUNT WEBHOOK HIT");
     res.sendStatus(200);
   }
 );
@@ -19,19 +61,120 @@ app.post(
 app.post(
   "/webhook/connected",
   bodyParser.raw({ type: "application/json" }),
-  (req, res) => {
-    stripe.webhooks.constructEvent(
-      req.body,
-      req.headers["stripe-signature"],
-      process.env.STRIPE_WEBHOOK_SECRET_CONNECTED
-    );
+  async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+    let event;
+
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET_CONNECTED
+      );
+    } catch (err) {
+      console.error("❌ Webhook signature failed:", err.message);
+      return res.sendStatus(400);
+    }
+
+    if (event.type === "account.updated") {
+      const account = event.data.object;
+
+      if (account.capabilities?.transfers === "active") {
+        console.log("🎉 Provider onboarded:", account.id);
+
+        const { rows } = await pool.query(
+          `
+          SELECT * FROM repair_requests
+          WHERE provider_stripe_account = $1
+            AND completion_status = 'user_confirmed'
+            AND payout_released_at IS NULL
+          `,
+          [account.id]
+        );
+
+        for (const repair of rows) {
+          if (!repair.payment_intent_id) continue;
+
+          const amount = Math.round(Number(repair.final_price) * 0.9 * 100);
+
+          await stripe.transfers.create({
+            amount,
+            currency: "usd",
+            destination: account.id,
+            source_transaction: repair.payment_intent_id,
+          });
+
+          await pool.query(
+            `UPDATE repair_requests
+             SET payout_released_at = NOW()
+             WHERE id = $1`,
+            [repair.id]
+          );
+
+          console.log("💸 Payout released:", repair.id);
+        }
+      }
+    }
+
     res.sendStatus(200);
   }
 );
 
-// 🔴 ONLY AFTER
+/* =======================
+   JSON + CORS (AFTER WEBHOOKS)
+======================= */
 app.use(express.json());
-app.use(cors());
+
+const allowedOrigins = [
+  "https://tajernow.com",
+  "http://localhost:3000",
+  "https://ecommerce-backend-y3v4.onrender.com",
+];
+
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) cb(null, true);
+      else cb(new Error("CORS blocked"));
+    },
+    credentials: true,
+  })
+);
+
+/* =======================
+   STATIC FILES
+======================= */
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+/* =======================
+   ROUTES (UNCHANGED)
+======================= */
+const repairRoutes = require("./routes/repairs");
+app.use("/api/repairs", repairRoutes);
+
+const availabilityRoutes = require("./routes/availabilityRoutes");
+app.use("/api", availabilityRoutes);
+
+const idUploadRoutes = require("./routes/idUpload");
+app.use("/api", idUploadRoutes);
+
+/* =======================
+   HEALTH CHECK
+======================= */
+app.get("/api/health", (req, res) => {
+  res.json({ status: "ok" });
+});
+
+/* =======================
+   STRIPE RETURN / REFRESH
+======================= */
+app.get("/stripe-refresh", (req, res) => {
+  res.send("Stripe refresh page");
+});
+
+app.get("/stripe-return", (req, res) => {
+  res.send("Stripe onboarding complete");
+});
 
 
 
