@@ -204,9 +204,7 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 
 
-// ✅ Add this line to mount the route
-const idUploadRoutes = require('./routes/idUpload');
-app.use('/api', idUploadRoutes);
+/
 
 
 console.log("🔍 APP_BASE_URL from .env:", process.env.APP_BASE_URL);
