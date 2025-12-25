@@ -189,9 +189,6 @@ app.get("/stripe-return", (req, res) => {
 
 
 
-// ✅ Mount availability routes here
-const availabilityRoutes = require('./routes/availabilityRoutes');
-app.use('/api', availabilityRoutes);
 
 // ✅ Store images to /uploads folder with unique names
 const storage = multer.diskStorage({
