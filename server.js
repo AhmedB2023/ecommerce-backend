@@ -5,15 +5,6 @@ require("dotenv").config();
 ======================= */
 const express = require("express");
 const app = express();
-const path = require("path");
-const cors = require("cors");
-const bodyParser = require("body-parser");
-
-/* =======================
-   DATABASE
-======================= */
-const pool = require("./db");
-const db = require("./db");
 
 /* =======================
    STRIPE
@@ -50,12 +41,6 @@ const { v4: uuidv4 } = require("uuid");
    STRIPE WEBHOOKS (MUST BE FIRST)
 ======================= */
 
-app.use((req, res, next) => {
-  if (req.originalUrl === "/webhook") {
-    console.log("MIDDLEWARE HIT BEFORE WEBHOOK");
-  }
-  next();
-});
 
 
 
@@ -131,6 +116,19 @@ app.post(
     res.sendStatus(200);
   }
 );
+
+
+
+
+const path = require("path");
+const cors = require("cors");
+const bodyParser = require("body-parser");
+
+/* =======================
+   DATABASE
+======================= */
+const pool = require("./db");
+const db = require("./db");
 
 /* =======================
    JSON + CORS (AFTER WEBHOOKS)
