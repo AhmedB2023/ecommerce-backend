@@ -53,8 +53,14 @@ app.post(
   "/webhook",
   bodyParser.raw({ type: "application/json" }),
   (req, res) => {
-    console.log("IS BUFFER:", Buffer.isBuffer(req.body));
-    console.log("SIG:", req.headers["stripe-signature"]);
+    const sig = req.headers["stripe-signature"];
+    const event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+
+    console.log("EVENT TYPE:", event.type);
     res.sendStatus(200);
   }
 );
