@@ -50,10 +50,28 @@ const { v4: uuidv4 } = require("uuid");
    STRIPE WEBHOOKS (MUST BE FIRST)
 ======================= */
 app.post(
-  "/webhook/account",
+  "/webhook",
   bodyParser.raw({ type: "application/json" }),
-  (req, res) => {
-    console.log("🔥 ACCOUNT WEBHOOK HIT");
+  async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+    const event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+
+    if (event.type === "payment_intent.succeeded") {
+      const intent = event.data.object;
+
+      await pool.query(
+        `UPDATE repair_requests
+         SET payment_method_id = $1,
+             payment_status = 'paid'
+         WHERE id = $2`,
+        [intent.payment_method, intent.metadata.repairId]
+      );
+    }
+
     res.sendStatus(200);
   }
 );
