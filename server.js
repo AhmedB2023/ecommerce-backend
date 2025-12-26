@@ -50,8 +50,19 @@ const { v4: uuidv4 } = require("uuid");
    STRIPE WEBHOOKS (MUST BE FIRST)
 ======================= */
 app.post("/webhook", bodyParser.raw({ type: "*/*" }), (req, res) => {
-  console.log("🔥 WEBHOOK HIT");
-  res.status(200).send("ok");
+  try {
+    const sig = req.headers["stripe-signature"];
+    const event = stripe.webhooks.constructEvent(
+      req.body,
+      sig,
+      process.env.STRIPE_WEBHOOK_SECRET
+    );
+    console.log("EVENT:", event.type);
+    res.sendStatus(200);
+  } catch (err) {
+    console.error("WEBHOOK ERROR:", err.message);
+    res.status(400).send("bad");
+  }
 });
 
 
