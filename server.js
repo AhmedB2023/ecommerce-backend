@@ -49,6 +49,8 @@ app.post(
   "/webhook",
   express.raw({ type: "application/json" }),
   (req, res) => {
+
+    console.log("SIG HEADER:", req.headers["stripe-signature"]);
     try {
       const event = stripe.webhooks.constructEvent(
         req.body,
