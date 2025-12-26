@@ -49,7 +49,7 @@ const { v4: uuidv4 } = require("uuid");
 /* =======================
    STRIPE WEBHOOKS (MUST BE FIRST)
 ======================= */
-app.post("/webhook", bodyParser.raw({ type: "*/*" }), (req, res) => {
+app.post("/webhook", bodyParser.raw({ type: "application/json"}), (req, res) => {
   try {
     const sig = req.headers["stripe-signature"];
     const event = stripe.webhooks.constructEvent(
