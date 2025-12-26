@@ -49,7 +49,16 @@ app.post(
   "/webhook",
   express.raw({ type: "application/json" }),
   (req, res) => {
-    console.log("IS BUFFER:", Buffer.isBuffer(req.body));
+    try {
+      const event = stripe.webhooks.constructEvent(
+        req.body,
+        req.headers["stripe-signature"],
+        process.env.STRIPE_WEBHOOK_SECRET
+      );
+      console.log("EVENT:", event.type);
+    } catch (e) {
+      console.log("SIG FAIL:", e.message);
+    }
     res.sendStatus(200);
   }
 );
