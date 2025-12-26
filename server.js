@@ -57,7 +57,7 @@ app.post(
 
 app.post(
   "/webhook/connected",
-  bodyParser.raw({ type: "application/json" }),
+  express.raw({ type: "application/json" }),
   async (req, res) => {
     const sig = req.headers["stripe-signature"];
     let event;
@@ -122,7 +122,7 @@ app.post(
 
 const path = require("path");
 const cors = require("cors");
-const bodyParser = require("body-parser");
+
 
 /* =======================
    DATABASE
