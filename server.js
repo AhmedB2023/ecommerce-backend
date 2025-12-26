@@ -49,21 +49,15 @@ const { v4: uuidv4 } = require("uuid");
 /* =======================
    STRIPE WEBHOOKS (MUST BE FIRST)
 ======================= */
-app.post("/webhook", bodyParser.raw({ type: "application/json"}), (req, res) => {
-  try {
-    const sig = req.headers["stripe-signature"];
-    const event = stripe.webhooks.constructEvent(
-      req.body,
-      sig,
-      process.env.STRIPE_WEBHOOK_SECRET
-    );
-    console.log("EVENT:", event.type);
+app.post(
+  "/webhook",
+  bodyParser.raw({ type: "application/json" }),
+  (req, res) => {
+    console.log("IS BUFFER:", Buffer.isBuffer(req.body));
+    console.log("SIG:", req.headers["stripe-signature"]);
     res.sendStatus(200);
-  } catch (err) {
-    console.error("WEBHOOK ERROR:", err.message);
-    res.status(400).send("bad");
   }
-});
+);
 
 
 app.post(
