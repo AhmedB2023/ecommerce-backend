@@ -188,6 +188,7 @@ app.get("/stripe-return", (req, res) => {
 
 
 
+const multer = require("multer");
 
 
 // ✅ Store images to /uploads folder with unique names
