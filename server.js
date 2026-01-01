@@ -49,33 +49,39 @@ app.post(
   "/webhook",
   express.raw({ type: "application/json" }),
   async (req, res) => {
-    const event = JSON.parse(req.body.toString());
+    let event;
 
-   if (event.type === "payment_intent.succeeded") {
-  const sig = req.headers["stripe-signature"];
-const event = stripe.webhooks.constructEvent(
-  req.body,
-  sig,
-  process.env.STRIPE_WEBHOOK_SECRET
-);
+    try {
+      const sig = req.headers["stripe-signature"];
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET
+      );
+    } catch (err) {
+      console.error("❌ Webhook signature error:", err.message);
+      return res.sendStatus(400);
+    }
 
+    if (event.type === "payment_intent.succeeded") {
+      const intent = event.data.object;
 
-  await pool.query(
-    `UPDATE repair_requests
-     SET payment_method_id = $1,
-         payment_status = 'paid',
-         charge_id = $2
-     WHERE payment_intent_id = $3`,
-    [intent.payment_method, intent.latest_charge, intent.id]
-  );
+      await pool.query(
+        `UPDATE repair_requests
+         SET payment_method_id = $1,
+             payment_status = 'paid',
+             charge_id = $2
+         WHERE payment_intent_id = $3`,
+        [intent.payment_method, intent.latest_charge, intent.id]
+      );
 
-  console.log("DB UPDATED FOR", intent.id);
-}
-
+      console.log("DB UPDATED FOR", intent.id);
+    }
 
     res.sendStatus(200);
   }
 );
+
 
 
 app.post(
