@@ -49,6 +49,9 @@ app.post(
   "/webhook",
   express.raw({ type: "*/*" }),
   (req, res) => {
+
+    const event = JSON.parse(req.body.toString());
+    console.log("EVENT TYPE:", event.type);
     console.log("🔥 BASIC WEBHOOK HIT");
     console.log("Headers:", req.headers);
     console.log("Is buffer:", Buffer.isBuffer(req.body));
