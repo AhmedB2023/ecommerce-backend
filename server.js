@@ -44,7 +44,6 @@ const { v4: uuidv4 } = require("uuid");
 
 
 
-
 app.post(
   "/webhook",
   express.raw({ type: "*/*" }),
@@ -57,9 +56,10 @@ app.post(
       await pool.query(
         `UPDATE repair_requests
          SET payment_status = 'paid',
-             charge_id = $1
-         WHERE payment_intent_id = $2`,
-        [intent.latest_charge, intent.id]
+             charge_id = $1,
+             payment_method_id = $2
+         WHERE payment_intent_id = $3`,
+        [intent.latest_charge, intent.payment_method, intent.id]
       );
 
       console.log("DB UPDATED FOR", intent.id);
@@ -68,6 +68,7 @@ app.post(
     res.sendStatus(200);
   }
 );
+
 
 
 
