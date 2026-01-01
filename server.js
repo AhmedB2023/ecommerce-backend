@@ -48,17 +48,26 @@ const { v4: uuidv4 } = require("uuid");
 app.post(
   "/webhook",
   express.raw({ type: "*/*" }),
-  (req, res) => {
-
+  async (req, res) => {
     const event = JSON.parse(req.body.toString());
-    console.log("EVENT TYPE:", event.type);
-    console.log("🔥 BASIC WEBHOOK HIT");
-    console.log("Headers:", req.headers);
-    console.log("Is buffer:", Buffer.isBuffer(req.body));
+
+    if (event.type === "payment_intent.succeeded") {
+      const intent = event.data.object;
+
+      await pool.query(
+        `UPDATE repair_requests
+         SET payment_status = 'paid',
+             charge_id = $1
+         WHERE payment_intent_id = $2`,
+        [intent.latest_charge, intent.id]
+      );
+
+      console.log("DB UPDATED FOR", intent.id);
+    }
+
     res.sendStatus(200);
   }
 );
-
 
 
 
