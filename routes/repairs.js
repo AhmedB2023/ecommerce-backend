@@ -525,7 +525,7 @@ router.post("/confirm-completion", async (req, res) => {
         amount: providerAmount,
         currency: "usd",
         destination: repair.provider_stripe_account,
-        source_transaction: repair.charge_id,
+        
         metadata: {
           repair_id: repair.id,
           job_code: repair.job_code,
