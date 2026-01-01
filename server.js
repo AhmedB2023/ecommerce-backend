@@ -52,7 +52,13 @@ app.post(
     const event = JSON.parse(req.body.toString());
 
    if (event.type === "payment_intent.succeeded") {
-  const intent = event.data.object;
+  const sig = req.headers["stripe-signature"];
+const event = stripe.webhooks.constructEvent(
+  req.body,
+  sig,
+  process.env.STRIPE_WEBHOOK_SECRET
+);
+
 
   await pool.query(
     `UPDATE repair_requests
