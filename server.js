@@ -47,40 +47,15 @@ const { v4: uuidv4 } = require("uuid");
 
 app.post(
   "/webhook",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    let event;
-
-    try {
-      const sig = req.headers["stripe-signature"];
-      event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET
-      );
-    } catch (err) {
-      console.error("❌ Webhook signature error:", err.message);
-      return res.sendStatus(400);
-    }
-
-    if (event.type === "payment_intent.succeeded") {
-      const intent = event.data.object;
-
-      await pool.query(
-        `UPDATE repair_requests
-         SET payment_method_id = $1,
-             payment_status = 'paid',
-             charge_id = $2
-         WHERE payment_intent_id = $3`,
-        [intent.payment_method, intent.latest_charge, intent.id]
-      );
-
-      console.log("DB UPDATED FOR", intent.id);
-    }
-
+  express.raw({ type: "*/*" }),
+  (req, res) => {
+    console.log("🔥 BASIC WEBHOOK HIT");
+    console.log("Headers:", req.headers);
+    console.log("Is buffer:", Buffer.isBuffer(req.body));
     res.sendStatus(200);
   }
 );
+
 
 
 
