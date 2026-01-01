@@ -339,8 +339,9 @@ router.post("/payments/start/:id", async (req, res) => {
       `UPDATE repair_requests
        SET customer_id = $1,
            payment_intent_id = $2
-       WHERE id = $3`,
-      [customer.id, paymentIntent.id, id]
+           payment_method_id = $3
+       WHERE id = $4`,
+      [customer.id, paymentIntent.id,paymentIntent.payment_method, id]
     );
 
     // 8️⃣ Return client secret
