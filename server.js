@@ -115,7 +115,8 @@ app.post(
             amount,
             currency: "usd",
             destination: account.id,
-            source_transaction: repair.payment_intent_id,
+           source_transaction: repair.charge_id
+,
           });
 
           await pool.query(
