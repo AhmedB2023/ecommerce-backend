@@ -341,7 +341,7 @@ router.post("/payments/start/:id", async (req, res) => {
            payment_intent_id = $2,
            
        WHERE id = $3`,
-      [customer.id, paymentIntent.id, paymentIntent.payment_method, id]
+      [customer.id, paymentIntent.id, id]
     );
 
     // 8️⃣ Return client secret
