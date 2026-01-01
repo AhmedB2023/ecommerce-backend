@@ -335,14 +335,14 @@ router.post("/payments/start/:id", async (req, res) => {
     });
 
     // 7️⃣ Save payment info
-    await pool.query(
-      `UPDATE repair_requests
-       SET customer_id = $1,
-           payment_intent_id = $2,
-           
-       WHERE id = $3`
-      [customer.id, paymentIntent.id, id]
-    );
+await pool.query(
+  `UPDATE repair_requests
+   SET customer_id = $1,
+       payment_intent_id = $2
+   WHERE id = $3`,
+  [customer.id, paymentIntent.id, id]
+);
+
 
     // 8️⃣ Return client secret
     res.json({
