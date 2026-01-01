@@ -51,19 +51,21 @@ app.post(
   async (req, res) => {
     const event = JSON.parse(req.body.toString());
 
-    if (event.type === "payment_intent.succeeded") {
-      const intent = event.data.object;
+   if (event.type === "payment_intent.succeeded") {
+  const intent = event.data.object;
 
-      await pool.query(
-        `UPDATE repair_requests
-         SET payment_method_id = $1,
-             payment_status = 'paid'
-         WHERE payment_intent_id = $2`,
-        [intent.payment_method, intent.id]
-      );
+  await pool.query(
+    `UPDATE repair_requests
+     SET payment_method_id = $1,
+         payment_status = 'paid',
+         charge_id = $2
+     WHERE payment_intent_id = $3`,
+    [intent.payment_method, intent.latest_charge, intent.id]
+  );
 
-      console.log("DB UPDATED FOR", intent.id);
-    }
+  console.log("DB UPDATED FOR", intent.id);
+}
+
 
     res.sendStatus(200);
   }
