@@ -29,6 +29,7 @@ const SibApiV3Sdk = require("sib-api-v3-sdk");
 const defaultClient = SibApiV3Sdk.ApiClient.instance;
 defaultClient.authentications["api-key"].apiKey = process.env.BREVO_API_KEY;
 const tranEmailApi = new SibApiV3Sdk.TransactionalEmailsApi();
+const { sendRepairEmail } = require('./utils/sendRepairEmail');
 
 /* =======================
    OTHER LIBS
@@ -56,6 +57,7 @@ app.post(
       await pool.query(
         `UPDATE repair_requests
          SET payment_status = 'paid',
+             status = 'deposit _paid',
              charge_id = $1,
              payment_method_id = $2
          WHERE payment_intent_id = $3`,
@@ -63,6 +65,32 @@ app.post(
       );
 
       console.log("DB UPDATED FOR", intent.id);
+
+     // ✅ FETCH REPAIR
+      const { rows } = await pool.query(
+        `SELECT * FROM repair_requests WHERE payment_intent_id = $1`,
+        [intent.id]
+      );
+
+      const repair = rows[0];
+
+      // ✅ SEND EMAIL TO PROVIDER
+      if (repair?.provider_email) {
+        await sendRepairEmail(
+          repair.provider_email,
+          `
+            <h2>Deposit Received — Job Confirmed</h2>
+            <p><strong>Job Code:</strong> ${repair.job_code}</p>
+            <p><strong>Customer Address:</strong> ${repair.customer_address}</p>
+            <p><strong>Description:</strong> ${repair.description}</p>
+            <p><strong>Preferred Time:</strong> ${repair.preferred_time}</p>
+            <p>Please contact the customer to schedule the repair.</p>
+          `
+        );
+
+        console.log("✅ Provider notified after deposit");
+      }
+
     }
 
     res.sendStatus(200);
