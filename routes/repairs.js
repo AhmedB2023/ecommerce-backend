@@ -776,7 +776,7 @@ router.get("/provider/start-onboarding", async (req, res) => {
     const link = await stripe.accountLinks.create({
       account: accountId,
       type: "account_onboarding",
-      refresh_url: `${process.env.APP_BASE_URL}/provider/start-onboarding?email=${providerEmail}`,
+      refresh_url: `${process.env.APP_BASE_URL}/api/repairs/provider/start-onboarding?email=${providerEmail}`,
       return_url: `${process.env.APP_BASE_URL}/onboarding-complete?account=${accountId}`
 
     });
